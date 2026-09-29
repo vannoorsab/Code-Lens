@@ -1,0 +1,51 @@
+# CodeLens — MVP dependency set (CHECKPOINTS.md CP-0.1)
+#
+# Deliberately minimal. ARCHITECTURE.md §"Two corrections": SQLite + NetworkX
+# now; Postgres / Neo4j / Qdrant / Redis arrive only when real load justifies
+# each one individually (CP-6.1, CP-9.2). Standing up five databases for zero
+# users is the failure mode STRATEGY.md §7 explicitly rejects.
+#
+# Deliberately REMOVED until the checkpoint that needs them:
+#   celery, redis, asyncpg        -> CP-6.1 (background jobs, managed Postgres)
+#   chromadb                      -> CP-3.3 (vector index; backend TBD)
+#   langchain, langgraph          -> not planned; the QueryPlan registry is the
+#                                    planner (ARCHITECTURE.md §5), not a chain lib
+#   kubernetes, prometheus, weasyprint -> CP-6.1 / CP-6.4
+
+# ── Web layer ─────────────────────────────────────────────────────────────
+fastapi==0.138.0
+uvicorn[standard]==0.49.0
+pydantic==2.13.4
+pydantic-settings==2.14.2
+
+# ── Ingestion (CP-1.1) ────────────────────────────────────────────────────
+GitPython==3.1.62
+
+# ── Parser engine (CP-1.2, CP-1.3) ────────────────────────────────────────
+tree-sitter==0.25.2
+tree-sitter-python==0.25.0
+tree-sitter-javascript==0.25.0
+tree-sitter-typescript==0.23.2
+radon==6.0.1                    # cyclomatic complexity
+
+# ── Knowledge graph (CP-1.4) ──────────────────────────────────────────────
+# SQLite (stdlib) is persistence; NetworkX is traversal.
+networkx==3.6.1
+
+# ── Semantic layer (Stage 3) ──────────────────────────────────────────────
+# The graph must be fully functional with ZERO LLM calls (ARCHITECTURE.md
+# corollary 1), so nothing here is imported before CP-3.1.
+anthropic==0.111.0
+# One SDK covers every OpenAI-compatible provider — Groq, OpenRouter, Ollama,
+# LM Studio — which is how the free tiers are reached (see semantic/llm.py).
+openai==2.43.0
+# Vector index for concept search is added at CP-3.3, once the embedding
+# backend is chosen. sqlite-vss / faiss-cpu wheels are unreliable on 3.13,
+# and nothing before Stage 3 needs them.
+
+# ── Tooling ───────────────────────────────────────────────────────────────
+pytest==9.1.1
+pytest-asyncio==1.4.0
+httpx==0.28.1                   # FastAPI TestClient transport
+ruff==0.15.22
+mypy==2.3.0
