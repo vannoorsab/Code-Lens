@@ -98,6 +98,23 @@ def test_generated_tests_are_pending_until_they_are_run() -> None:
     assert "assert True" not in suite.test_code
 
 
+def test_generated_test_source_must_be_inside_the_workspace(tmp_path: Path) -> None:
+    agent = RunFixTestAgent()
+    fix = ProposedFix(
+        fix_id="outside",
+        affected_file="../outside.py",
+        explanation="Do not generate a test that reads outside the workspace.",
+        diff="",
+    )
+
+    with pytest.raises(ValueError, match="relative path"):
+        agent.generate_tests(
+            DetectedProject(language="Python"),
+            fix,
+            tmp_path,
+        )
+
+
 def test_unexecuted_fix_is_not_reported_as_verified_or_a_created_pr() -> None:
     fix = ProposedFix(
         fix_id="review",
@@ -115,6 +132,7 @@ def test_unexecuted_fix_is_not_reported_as_verified_or_a_created_pr() -> None:
     assert summary.build_status != "SUCCESS"
     assert summary.tests_passed == 0
     assert summary.security_verdict == "Not assessed"
+    assert "- **Tests**: Not run" in summary.pr_body
 
 
 def test_workspace_must_be_a_directory(tmp_path: Path) -> None:

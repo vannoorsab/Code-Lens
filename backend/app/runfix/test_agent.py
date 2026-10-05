@@ -7,6 +7,7 @@ Jest, Vitest, PyTest, or JUnit to verify robustness and prevent regressions.
 from __future__ import annotations
 
 import posixpath
+from pathlib import Path, PureWindowsPath
 from pathlib import PurePosixPath
 from pydantic import BaseModel, Field
 
@@ -38,11 +39,31 @@ class TestAgent:
     def __init__(self):
         pass
 
-    def generate_tests(self, project: DetectedProject, fix: ProposedFix) -> TestSuiteResult:
+    def generate_tests(
+        self,
+        project: DetectedProject,
+        fix: ProposedFix,
+        workspace_dir: str | Path | None = None,
+    ) -> TestSuiteResult:
         """Constructs targeted unit tests for the modified file."""
         affected_path = PurePosixPath(fix.affected_file.replace("\\", "/"))
-        if affected_path.is_absolute() or ".." in affected_path.parts:
+        windows_path = PureWindowsPath(fix.affected_file)
+        if (
+            affected_path.is_absolute()
+            or windows_path.is_absolute()
+            or windows_path.drive
+            or ".." in affected_path.parts
+        ):
             raise ValueError("Affected file must be a relative path inside the workspace.")
+        if workspace_dir is not None:
+            workspace = Path(workspace_dir).resolve()
+            target = (workspace / Path(*affected_path.parts)).resolve()
+            try:
+                affected_path = PurePosixPath(target.relative_to(workspace).as_posix())
+            except ValueError as exc:
+                raise ValueError("Affected file must be inside the workspace.") from exc
+            if not target.is_file():
+                raise ValueError("Affected file does not exist in the workspace.")
         stem = affected_path.stem
         javascript = project.language in ("TypeScript", "JavaScript")
         python = project.language == "Python"
@@ -50,12 +71,18 @@ class TestAgent:
         if javascript and affected_path.suffix in (".ts", ".tsx", ".js", ".jsx"):
             framework = project.test_framework or "Vitest"
             if framework not in ("Vitest", "Jest"):
-                framework = "Vitest"
+                return TestSuiteResult(
+                    framework=framework,
+                    test_file_path="",
+                    test_code="",
+                    is_verified=False,
+                )
             test_path = f"src/__tests__/{stem}.test.ts"
             source_module = affected_path.with_suffix("")
             relative_module = posixpath.relpath(source_module.as_posix(), "src/__tests__")
             if not relative_module.startswith("."):
                 relative_module = f"./{relative_module}"
+            test_import = "vitest" if framework == "Vitest" else "@jest/globals"
             test_cases = [
                 GeneratedTestCase(
                     name="test_module_imports",
@@ -64,7 +91,7 @@ class TestAgent:
                 )
             ]
             code = (
-                f"import {{ describe, expect, it }} from '{framework.lower()}';\n"
+                f"import {{ describe, expect, it }} from '{test_import}';\n"
                 f"import * as subject from '{relative_module}';\n\n"
                 f"describe('{stem} smoke test', () => {{\n"
                 "  it('loads the changed module', () => {\n"

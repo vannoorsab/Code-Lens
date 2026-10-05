@@ -16,10 +16,10 @@ export default function TestsPage() {
           <div className="flex items-center justify-between border-b border-slate-800 pb-4">
             <div>
               <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-                <span>🧪</span> Automated Regression Test Suites
+                <span>🧪</span> Regression Test Generator
               </h1>
               <p className="text-xs text-slate-400 mt-1">
-                AI-synthesized tests in Vitest, Jest, or PyTest to verify patch validity.
+                Generate a module smoke test in the detected framework, then run it in your workspace to verify the change.
               </p>
             </div>
             <button
@@ -37,7 +37,7 @@ export default function TestsPage() {
               <div className="text-4xl">🧪</div>
               <h3 className="text-base font-semibold text-slate-200">No Tests Generated Yet</h3>
               <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                Once an AI fix is proposed or applied, click "Generate Test Suite" to construct comprehensive verification tests.
+                Generate a smoke test for the changed module. Tests are marked pending until you run them in your project.
               </p>
             </div>
           ) : (

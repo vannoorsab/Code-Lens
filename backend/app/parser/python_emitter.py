@@ -7,7 +7,6 @@ query or an LLM is.
 
 from __future__ import annotations
 
-import hashlib
 import re
 from dataclasses import dataclass, replace
 from pathlib import PurePosixPath
@@ -19,6 +18,7 @@ from tree_sitter import Node as TSNode
 from app.graph.schema import EntrypointKind, Node, NodeKind
 from app.parser.complexity import complexity_by_line
 from app.parser.facts import FileFacts, RawBase, RawCall, RawImport, RawRoute
+from app.parser.hashing import source_hash
 from app.parser.routes import join_path, parse_decorator_route, router_prefix
 
 _LANGUAGE = Language(tree_sitter_python.language())
@@ -426,7 +426,7 @@ class _FileWalker:
         return None
 
     def _hash_range(self, node: TSNode) -> str:
-        return hashlib.sha256(self.source[node.start_byte : node.end_byte]).hexdigest()
+        return source_hash(self.source[node.start_byte : node.end_byte])
 
     def _extra(self, node: TSNode, decorators: list[str]) -> dict:
         extra: dict = {}

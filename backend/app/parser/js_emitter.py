@@ -27,7 +27,6 @@ Coverage, stated honestly:
 
 from __future__ import annotations
 
-import hashlib
 import re
 from dataclasses import dataclass
 from pathlib import PurePosixPath
@@ -38,6 +37,7 @@ from tree_sitter import Node as TSNode
 
 from app.graph.schema import Node, NodeKind
 from app.parser.facts import FileFacts, RawBase, RawCall, RawImport, RawRoute
+from app.parser.hashing import source_hash
 from app.parser.routes import parse_call_route
 
 _LANGUAGE = Language(tree_sitter_javascript.language())
@@ -352,7 +352,7 @@ class _JsWalker:
                 start_line=start_line,
                 end_line=end_line,
                 language=self.language_name,
-                content_hash=hashlib.sha256(snippet).hexdigest(),
+                content_hash=source_hash(snippet),
                 loc=end_line - start_line + 1,
                 complexity=self._complexity(snippet),
                 extra=self._parameters(function_node),
@@ -401,7 +401,7 @@ class _JsWalker:
             start_line=start_line,
             end_line=end_line,
             language=self.language_name,
-            content_hash=hashlib.sha256(snippet).hexdigest(),
+            content_hash=source_hash(snippet),
             loc=end_line - start_line + 1,
             complexity=self._complexity(snippet),
             extra=self._parameters(body_holder),
@@ -447,7 +447,7 @@ class _JsWalker:
                 start_line=start_line,
                 end_line=end_line,
                 language=self.language_name,
-                content_hash=hashlib.sha256(snippet).hexdigest(),
+                content_hash=source_hash(snippet),
                 loc=end_line - start_line + 1,
             )
         )

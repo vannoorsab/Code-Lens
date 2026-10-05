@@ -28,7 +28,7 @@ class ChangeSummary(BaseModel):
 
 
 class GitHubWorkflow:
-    """Automates GitHub branching, commits, and Pull Request creation."""
+    """Prepares PR summaries and submits a pull request for an existing branch."""
 
     def __init__(self, token: str | None = None):
         self.token = token or settings.GITHUB_TOKEN
@@ -49,6 +49,11 @@ class GitHubWorkflow:
         tests_passed = tests.passed_tests if tests and tests.is_verified else 0
         tests_failed = tests.failed_tests if tests else 0
         build_status = "SUCCESS" if fix.status == "APPLIED" and tests and tests.is_verified else "NOT_VERIFIED"
+        tests_status = (
+            f"{tests_passed} passed, {tests_failed} failed"
+            if tests and tests.is_verified
+            else "Not run"
+        )
 
         title = f"fix(autodebug): resolve execution failure in {fix.affected_file}"
         body = (
@@ -59,12 +64,11 @@ class GitHubWorkflow:
             f"- **Rationale**: {fix.explanation}\n\n"
             f"### Verification Status\n"
             f"- **Build**: {build_status}\n"
-            f"- **Tests**: {tests_passed} passed, {tests_failed} failed"
-            f"{' (not executed)' if tests and not tests.is_verified else ''}\n"
+            f"- **Tests**: {tests_status}\n"
             f"- **Security**: Not assessed\n\n"
             f"### Proposed Diff\n"
             f"```diff\n{fix.diff}\n```\n\n"
-            f"---\n*Generated and autonomously verified by CodeLens RunFix.*"
+            f"---\n*Prepared by CodeLens RunFix.*"
         )
 
         return ChangeSummary(

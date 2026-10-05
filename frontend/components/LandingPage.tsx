@@ -1,9 +1,16 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useGraphStore } from "@/lib/store";
+
+const workflow = [
+  { number: "01", title: "Inspect", detail: "Map files and relationships" },
+  { number: "02", title: "Run", detail: "See command output as it happens" },
+  { number: "03", title: "Diagnose", detail: "Trace errors to their source" },
+  { number: "04", title: "Review", detail: "Inspect a suggested minimal patch" },
+];
 
 export default function LandingPage() {
   const router = useRouter();
@@ -16,147 +23,154 @@ export default function LandingPage() {
       await loadDemoBrokenProject(type);
       router.push("/runfix");
     } catch {
-      /* handled in store */
+      // The store reports demo-loading errors to the application UI.
     } finally {
       setDemoLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 selection:bg-cyan-500 selection:text-slate-950 font-sans relative overflow-x-hidden">
-      {/* Background Subtle Mesh Grid */}
-      <div className="absolute inset-0 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:24px_24px] opacity-30 pointer-events-none" />
+    <div className="landing-page">
+      <div className="landing-backdrop" aria-hidden="true" />
 
-      {/* Hero Header Nav */}
-      <header className="relative z-10 flex items-center justify-between px-8 py-5 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md max-w-7xl mx-auto">
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-cyan-500 to-indigo-600 flex items-center justify-center font-mono font-bold text-slate-950 text-base shadow-lg shadow-cyan-500/20">
-            RF
-          </div>
-          <span className="font-bold text-lg tracking-tight text-white font-mono">CodeLens RunFix</span>
-          <span className="rounded-full bg-cyan-950 border border-cyan-800 px-2.5 py-0.5 font-mono text-[10px] text-cyan-300">
-            AI Debugging Engineer
-          </span>
-        </div>
+      <header className="landing-header">
+        <Link className="landing-brand" href="/" aria-label="CodeLens home">
+          <span className="landing-brand-mark" aria-hidden="true">CL</span>
+          <span className="landing-brand-name">CodeLens</span>
+          <span className="landing-brand-product">CODE INTELLIGENCE</span>
+        </Link>
 
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => handleLaunchDemo("react")}
-            disabled={demoLoading}
-            className="text-xs font-semibold text-slate-300 hover:text-white transition-colors"
-          >
-            {demoLoading ? "Loading Demo..." : "Try Instant Demo"}
-          </button>
-          <Link
-            href="/runfix"
-            className="rounded-xl bg-gradient-to-r from-cyan-600 to-indigo-600 px-4 py-2 text-xs font-bold text-white hover:from-cyan-500 hover:to-indigo-500 transition-all shadow-md shadow-cyan-950"
-          >
-            Open RunFix Studio →
-          </Link>
-        </div>
+        <nav className="landing-nav" aria-label="Main navigation">
+          <a href="#how-it-works">How it works</a>
+          <a href="#capabilities">Capabilities</a>
+          <Link href="/about">About</Link>
+          <Link className="landing-nav-cta" href="/runfix">Open workspace <span aria-hidden="true">→</span></Link>
+        </nav>
       </header>
 
-      {/* ── HERO SECTION ─────────────────────────────────────────────────── */}
-      <section className="relative z-10 max-w-5xl mx-auto pt-20 pb-16 px-6 text-center">
-        <div className="inline-flex items-center gap-2 rounded-full border border-cyan-800/60 bg-cyan-950/40 px-3.5 py-1 text-xs font-semibold text-cyan-300 mb-6">
-          <span>⚡</span>
-          <span>Autonomous Execution • Diagnosis • Surgical Fix • Verification</span>
-        </div>
+      <main>
+        <section className="landing-hero">
+          <div className="landing-hero-copy">
+            <div className="landing-eyebrow">
+              <span className="landing-status-dot" />
+              CODEBASE EXPLORATION · RUNFIX
+            </div>
+            <h1>
+              Understand the code
+              <span>before you change it.</span>
+            </h1>
+            <p className="landing-lede">
+              Explore how files and symbols connect, then use RunFix to inspect
+              command output and review a possible fix with the surrounding context.
+            </p>
 
-        <h1 className="text-4xl md:text-6xl font-extrabold text-white tracking-tight leading-tight">
-          Give CodeLens a Broken Project. <br />
-          <span className="bg-gradient-to-r from-cyan-400 via-indigo-300 to-indigo-500 bg-clip-text text-transparent">
-            It Finds, Fixes, Re-Runs & Verifies.
-          </span>
-        </h1>
-
-        <p className="mt-6 text-base md:text-lg text-slate-400 max-w-2xl mx-auto leading-relaxed">
-          Not just an AI chatbot that explains code. CodeLens RunFix executes applications in a secure sandbox,
-          captures real runtime errors, generates surgical minimal diffs, reruns, and verifies fix validity.
-        </p>
-
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-          <button
-            onClick={() => handleLaunchDemo("react")}
-            disabled={demoLoading}
-            className="rounded-xl bg-gradient-to-r from-cyan-600 to-indigo-600 px-6 py-3.5 text-sm font-bold text-white hover:from-cyan-500 hover:to-indigo-500 transition-all shadow-xl shadow-cyan-950/50 flex items-center gap-2"
-          >
-            <span>⚡</span>
-            <span>{demoLoading ? "Launching Demo Sandbox..." : "Demo: Broken React App"}</span>
-          </button>
-          <button
-            onClick={() => handleLaunchDemo("python")}
-            disabled={demoLoading}
-            className="rounded-xl border border-slate-800 bg-slate-900/80 px-6 py-3.5 text-sm font-semibold text-slate-300 hover:bg-slate-800 hover:text-white transition-all flex items-center gap-2"
-          >
-            <span>🐍</span>
-            <span>Demo: Broken Python App</span>
-          </button>
-        </div>
-
-        {/* ── 4-STEP AGENTIC WORKFLOW DIAGRAM ──────────────────────────────── */}
-        <div className="mt-14 p-6 rounded-2xl border border-slate-800 bg-slate-900/60 backdrop-blur-md max-w-4xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-center">
-            {[
-              { label: "1. Detect", icon: "📁", sub: "Framework & Scripts" },
-              { label: "2. Run Sandbox", icon: "▶", sub: "Live Stdout / Stderr" },
-              { label: "3. Parse Error", icon: "💥", sub: "Extract File & Line" },
-              { label: "4. AI Diagnosis", icon: "🤖", sub: "Root Cause Reasoner" },
-              { label: "5. Surgical Fix", icon: "⚡", sub: "Minimal Diff Patch" },
-              { label: "6. Verify & Test", icon: "🛡️", sub: "Re-run & PR Ready" },
-            ].map((step) => (
-              <div
-                key={step.label}
-                className="relative rounded-xl border border-slate-800 bg-slate-950 p-3.5 flex flex-col items-center hover:border-cyan-800/80 transition-all"
+            <div className="landing-actions">
+              <Link className="landing-button landing-button-primary" href="/runfix">
+                Open CodeLens <span aria-hidden="true">→</span>
+              </Link>
+              <button
+                className="landing-button landing-button-secondary"
+                onClick={() => handleLaunchDemo("react")}
+                disabled={demoLoading}
               >
-                <div className="text-2xl mb-1.5">{step.icon}</div>
-                <div className="text-xs font-bold text-slate-200">{step.label}</div>
-                <div className="text-[10px] text-slate-500 mt-0.5">{step.sub}</div>
+                <span aria-hidden="true">{demoLoading ? "◌" : "▶"}</span>
+                {demoLoading ? "Loading sample…" : "Try the sample project"}
+              </button>
+            </div>
+            <p className="landing-action-note">
+              No account needed · Review changes before applying them
+            </p>
+          </div>
+
+          <div className="landing-visual" role="img" aria-label="Illustration of CodeLens code relationships and RunFix review">
+            <div className="landing-visual-top">
+              <div>
+                <span className="landing-panel-kicker">CODELENS WORKSPACE</span>
+                <h2>From structure to change</h2>
               </div>
+              <span className="landing-panel-indicator"><span /> READY TO EXPLORE</span>
+            </div>
+
+            <div className="landing-map">
+              <div className="landing-map-lines" aria-hidden="true">
+                <i className="landing-line landing-line-one" />
+                <i className="landing-line landing-line-two" />
+                <i className="landing-line landing-line-three" />
+                <i className="landing-line landing-line-four" />
+                <i className="landing-line landing-line-five" />
+              </div>
+              <div className="landing-map-node landing-map-root"><span className="landing-node-icon">⌘</span><span>src</span></div>
+              <div className="landing-map-node landing-map-api"><span className="landing-node-icon">ƒ</span><span>api</span></div>
+              <div className="landing-map-node landing-map-ui"><span className="landing-node-icon">◫</span><span>ui</span></div>
+              <div className="landing-map-node landing-map-data"><span className="landing-node-icon">▤</span><span>data</span></div>
+              <div className="landing-map-node landing-map-test"><span className="landing-node-icon">✓</span><span>tests</span></div>
+              <div className="landing-map-caption">Explore dependencies and nearby symbols</div>
+            </div>
+
+            <div className="landing-review-card">
+              <span className="landing-review-icon" aria-hidden="true">↗</span>
+              <div className="landing-review-copy">
+                <strong>RunFix review</strong>
+                <span>Inspect the output. Review a candidate patch.</span>
+              </div>
+              <span className="landing-review-badge">HUMAN REVIEW</span>
+            </div>
+          </div>
+        </section>
+
+        <section className="landing-workflow" id="how-it-works" aria-labelledby="workflow-title">
+          <div className="landing-section-heading">
+            <div>
+              <span className="landing-section-kicker">A CLEARER WAY TO DEBUG</span>
+              <h2 id="workflow-title">Follow the evidence, step by step.</h2>
+            </div>
+            <p>CodeLens brings repository context and runtime feedback into one workspace.</p>
+          </div>
+          <ol className="landing-workflow-list">
+            {workflow.map((step, index) => (
+              <li className="landing-workflow-step" key={step.number}>
+                <span className="landing-step-number">{step.number}</span>
+                <div>
+                  <h3>{step.title}</h3>
+                  <p>{step.detail}</p>
+                </div>
+                {index < workflow.length - 1 && <span className="landing-step-arrow" aria-hidden="true">→</span>}
+              </li>
             ))}
-          </div>
-        </div>
-      </section>
+          </ol>
+        </section>
 
-      {/* ── FEATURE COMPARISON SECTION ───────────────────────────────────── */}
-      <section className="relative z-10 max-w-5xl mx-auto py-12 px-6">
-        <div className="text-center mb-8">
-          <h2 className="text-2xl font-bold text-white tracking-tight">
-            Why CodeLens RunFix is Different
-          </h2>
-          <p className="text-xs text-slate-400 mt-1">Autonomous Developer Agent vs Generic AI Chatbots</p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="p-6 rounded-2xl border border-rose-950/60 bg-slate-900/40 space-y-4">
-            <div className="text-rose-400 font-bold text-sm uppercase tracking-wide flex items-center gap-2">
-              <span>✕</span> Generic AI Chatbots
+        <section className="landing-capabilities" id="capabilities" aria-label="CodeLens capabilities">
+          <article className="landing-capability">
+            <span className="landing-capability-icon landing-capability-blue" aria-hidden="true">⌘</span>
+            <div>
+              <h3>See how your code connects</h3>
+              <p>Explore Python, JavaScript, and TypeScript structure as an interactive graph.</p>
             </div>
-            <ul className="text-xs text-slate-400 space-y-2.5 leading-relaxed">
-              <li>• Cannot run or compile the code.</li>
-              <li>• Hallucinates reasons without seeing actual stderr / compiler outputs.</li>
-              <li>• Rewrites entire files unnecessarily, introducing subtle regressions.</li>
-              <li>• Has zero concept of whether the proposed code actually fixes the bug.</li>
-            </ul>
-          </div>
-
-          <div className="p-6 rounded-2xl border border-emerald-950/80 bg-emerald-950/10 space-y-4">
-            <div className="text-emerald-400 font-bold text-sm uppercase tracking-wide flex items-center gap-2">
-              <span>✓</span> CodeLens RunFix Agent
+            <Link href="/graph" aria-label="Explore the code graph">↗</Link>
+          </article>
+          <article className="landing-capability">
+            <span className="landing-capability-icon landing-capability-cyan" aria-hidden="true">⌁</span>
+            <div>
+              <h3>Investigate a failing run</h3>
+              <p>Run project commands and inspect captured output and error details.</p>
             </div>
-            <ul className="text-xs text-slate-300 space-y-2.5 leading-relaxed">
-              <li>• Runs projects inside isolated sandbox workspaces in real time.</li>
-              <li>• Parses structured errors, compiler codes, and exact stack trace lines.</li>
-              <li>• Constructs surgical unified diffs with exact minimal line changes.</li>
-              <li>• Re-runs the application & generates automated tests to prove fix validity.</li>
-            </ul>
-          </div>
-        </div>
-      </section>
+            <Link href="/runfix" aria-label="Open RunFix">↗</Link>
+          </article>
+          <article className="landing-capability">
+            <span className="landing-capability-icon landing-capability-violet" aria-hidden="true">✓</span>
+            <div>
+              <h3>Keep the developer in control</h3>
+              <p>Review suggested changes yourself; generated test templates remain pending until you run them.</p>
+            </div>
+            <Link href="/tests" aria-label="View test suites">↗</Link>
+          </article>
+        </section>
+      </main>
 
-      {/* Footer */}
-      <footer className="border-t border-slate-800/80 py-8 text-center text-xs text-slate-600 font-mono">
-        CodeLens RunFix — Autonomous AI Debugging & Verification Engine
+      <footer className="landing-footer">
+        <span>CodeLens <span aria-hidden="true">·</span> Make the codebase easier to understand.</span>
+        <Link href="/about">Learn about the project <span aria-hidden="true">→</span></Link>
       </footer>
     </div>
   );

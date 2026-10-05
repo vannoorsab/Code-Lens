@@ -224,20 +224,26 @@ def read_git_metadata(root: Path) -> tuple[str, str | None]:
     missing repository is not an error — the sha is reported as "unknown"
     rather than invented.
     """
-    try:
-        from git import InvalidGitRepositoryError, NoSuchPathError, Repo
-    except ImportError:  # pragma: no cover - GitPython is a hard dependency
-        return "unknown", None
+    def git_output(*args: str) -> str | None:
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(root), *args],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=5,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        return result.stdout.strip() if result.returncode == 0 else None
 
-    try:
-        repo = Repo(root, search_parent_directories=False)
-        commit_sha = repo.head.commit.hexsha
-    except (InvalidGitRepositoryError, NoSuchPathError, ValueError):
+    git_root = git_output("rev-parse", "--show-toplevel")
+    if not git_root or Path(git_root).resolve() != root.resolve():
         return "unknown", None
-
-    origin_url: str | None = None
-    if "origin" in {remote.name for remote in repo.remotes}:
-        origin_url = next(iter(repo.remotes.origin.urls), None)
+    commit_sha = git_output("rev-parse", "--verify", "HEAD")
+    if not commit_sha:
+        return "unknown", None
+    origin_url = git_output("remote", "get-url", "origin")
     return commit_sha, origin_url
 
 
@@ -251,4 +257,3 @@ def _rmtree(path: Path) -> None:
 
     if path.exists():
         shutil.rmtree(path, onerror=_onerror)
-

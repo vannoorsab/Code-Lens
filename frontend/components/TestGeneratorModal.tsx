@@ -18,8 +18,8 @@ export default function TestGeneratorModal({ isOpen, onClose }: { isOpen: boolea
           <div className="flex items-center gap-2.5">
             <span className="text-xl">🧪</span>
             <div>
-              <h2 className="text-base font-bold text-white tracking-tight">Automated Test Verification</h2>
-              <p className="text-xs text-slate-400">AI-generated regression suites</p>
+              <h2 className="text-base font-bold text-white tracking-tight">Generated Smoke Tests</h2>
+              <p className="text-xs text-slate-400">Run the generated test in your workspace; execution is not automatic.</p>
             </div>
           </div>
           <button

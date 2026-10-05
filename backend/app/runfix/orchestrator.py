@@ -99,7 +99,10 @@ class Orchestrator:
             evt = self.add_timeline_event("RUN", "▶", f"Executing target command: '{cmd}' (Attempt {iteration})")
             yield {"type": "timeline", "event": evt.model_dump(), "state": self.state.model_dump()}
 
-            session = sandbox_manager.create_session(workspace, timeout_seconds=60)
+            session = sandbox_manager.create_session(
+                workspace,
+                timeout_seconds=settings.RUNFIX_SANDBOX_TIMEOUT_SECONDS,
+            )
             stdout_acc = []
             stderr_acc = []
 
@@ -188,7 +191,7 @@ class Orchestrator:
         yield {"type": "timeline", "event": evt.model_dump(), "state": self.state.model_dump()}
 
         if self.state.latest_fix:
-            tests = test_agent.generate_tests(project, self.state.latest_fix)
+            tests = test_agent.generate_tests(project, self.state.latest_fix, workspace)
             self.state.latest_tests = tests
             evt = self.add_timeline_event(
                 "TEST",

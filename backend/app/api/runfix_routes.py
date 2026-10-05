@@ -20,6 +20,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from app.core.config import settings
 from app.runfix.debug_agent import DiagnosisReport, debug_agent
 from app.runfix.demo_samples import setup_broken_python_demo, setup_broken_react_demo
 from app.runfix.detector import DetectedProject, detect_project
@@ -48,7 +49,11 @@ class DetectRequest(BaseModel):
 class RunRequest(BaseModel):
     command: str = Field(min_length=1, max_length=4096)
     workspace_path: str = Field(default=".", min_length=1, max_length=4096)
-    timeout_seconds: int = Field(default=120, ge=1, le=3600)
+    timeout_seconds: int = Field(
+        default=settings.RUNFIX_SANDBOX_TIMEOUT_SECONDS,
+        ge=1,
+        le=3600,
+    )
 
 
 class DiagnoseRequest(BaseModel):
@@ -155,7 +160,10 @@ async def api_generate_tests(req: GenerateTestsRequest):
     """Synthesizes an automated regression test suite in Vitest/Jest/PyTest."""
     path = _workspace_path(req.workspace_path)
     project = detect_project(path)
-    return test_agent.generate_tests(project, req.fix)
+    try:
+        return test_agent.generate_tests(project, req.fix, path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/auto")
