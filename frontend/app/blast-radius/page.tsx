@@ -3,26 +3,19 @@
 import React, { useState } from "react";
 import AppShell from "@/components/AppShell";
 import { useGraphStore } from "@/lib/store";
-import MemoryEvidencePanel from "@/components/MemoryEvidencePanel";
-import AgentActivityTrace from "@/components/AgentActivityTrace";
 import Link from "next/link";
 
 export default function BlastRadiusPage() {
   const spec = useGraphStore((s) => s.spec);
   const blast = useGraphStore((s) => s.blast);
-  const rippleFor = useGraphStore((s) => s.rippleFor);
   const showRipple = useGraphStore((s) => s.showRipple);
   const clearRipple = useGraphStore((s) => s.clearRipple);
-  const rippleEndpoints = useGraphStore((s) => s.rippleEndpoints);
-  const memoryAnalysis = useGraphStore((s) => s.memoryAnalysis);
-  const runMemoryAwareAnalysis = useGraphStore((s) => s.runMemoryAwareAnalysis);
 
   const [selectedNode, setSelectedNode] = useState(spec?.nodes[0]?.id || "");
 
   const handleRunBlast = async () => {
     if (!selectedNode) return;
     await showRipple(selectedNode);
-    await runMemoryAwareAnalysis(selectedNode);
   };
 
   const ranked = blast?.ranked || [];
@@ -30,25 +23,25 @@ export default function BlastRadiusPage() {
 
   return (
     <AppShell>
-      <div className="p-8 space-y-8 max-w-7xl mx-auto">
+      <div className="p-8 space-y-8 max-w-7xl mx-auto font-sans overflow-y-auto h-full">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-5">
           <div>
             <div className="flex items-center gap-2 font-mono text-xs text-cyan-400">
               <span>💥 Impact Analysis</span>
             </div>
-            <h1 className="text-2xl font-extrabold text-white mt-1">Blast Radius Experience</h1>
+            <h1 className="text-2xl font-extrabold text-white mt-1">Blast Radius Exploration</h1>
             <p className="text-xs text-slate-400 mt-1">
-              Select a target code component to compute structural dependency ripples & historical incident risks
+              Select a target code component to compute AST structural dependency ripples and affected files
             </p>
           </div>
 
           <div className="flex items-center gap-3">
             <Link
-              href="/agent"
-              className="rounded-lg bg-cyan-600 px-4 py-2 text-xs font-bold text-white hover:bg-cyan-500 transition-all shadow-md"
+              href="/runfix"
+              className="rounded-lg bg-gradient-to-r from-cyan-600 to-indigo-600 px-4 py-2 text-xs font-bold text-white hover:from-cyan-500 hover:to-indigo-500 transition-all shadow-md"
             >
-              Ask CODE-LENS Agent →
+              Open RunFix Studio →
             </Link>
           </div>
         </div>
@@ -93,69 +86,33 @@ export default function BlastRadiusPage() {
         {blast ? (
           <div className="space-y-6">
             {/* Impact Metric Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 font-mono text-center">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 font-mono text-center">
               <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
                 <span className="text-2xl font-extrabold text-cyan-400">{ranked.length}</span>
                 <span className="block text-[10px] text-slate-400 mt-1 uppercase">Affected Symbols</span>
               </div>
               <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-                <span className="text-2xl font-extrabold text-purple-400">{affectedFiles.size}</span>
+                <span className="text-2xl font-extrabold text-indigo-400">{affectedFiles.size}</span>
                 <span className="block text-[10px] text-slate-400 mt-1 uppercase">Affected Files</span>
               </div>
               <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-                <span className="text-2xl font-extrabold text-indigo-400">{rippleEndpoints.length}</span>
-                <span className="block text-[10px] text-slate-400 mt-1 uppercase">Affected Endpoints</span>
-              </div>
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-                <span className="text-2xl font-extrabold text-emerald-400">
-                  {memoryAnalysis?.historical_memories?.length || 0}
-                </span>
-                <span className="block text-[10px] text-slate-400 mt-1 uppercase">Historical Memories</span>
+                <span className="text-2xl font-extrabold text-emerald-400">{blast.max_depth}</span>
+                <span className="block text-[10px] text-slate-400 mt-1 uppercase">Max Depth (Hops)</span>
               </div>
             </div>
 
-            {/* Grid: Ranked Affected Symbols vs Affected Endpoints */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Affected Symbols */}
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-3">
-                <h3 className="font-mono text-xs font-bold text-slate-200">Direct & Transitive Dependents</h3>
-                <div className="space-y-2 max-h-80 overflow-y-auto pr-2">
-                  {ranked.map((r) => (
-                    <div key={r.node_id} className="flex items-center justify-between p-2 rounded bg-slate-950 text-xs font-mono border border-slate-850">
-                      <span className="text-slate-200 truncate">{r.reasons.name || r.node_id}</span>
-                      <span className="text-[10px] text-cyan-400">hop: {r.reasons.distance}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Affected Endpoints */}
-              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-3">
-                <h3 className="font-mono text-xs font-bold text-slate-200">Reachable HTTP Endpoints</h3>
-                {rippleEndpoints.length === 0 ? (
-                  <p className="text-xs text-slate-500 py-4 italic">No HTTP API endpoints reached by this change.</p>
-                ) : (
-                  <div className="space-y-2 max-h-80 overflow-y-auto">
-                    {rippleEndpoints.map((ep) => (
-                      <div key={ep.id} className="flex items-center gap-2 p-2 rounded bg-slate-950 text-xs font-mono border border-slate-850">
-                        <span className="rounded bg-cyan-950 border border-cyan-800 px-1.5 py-0.5 text-[10px] text-cyan-300 font-bold">
-                          {ep.method}
-                        </span>
-                        <span className="text-slate-200">{ep.path}</span>
-                      </div>
-                    ))}
+            {/* Affected Symbols */}
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-3">
+              <h3 className="font-mono text-xs font-bold text-slate-200">Direct & Transitive Dependents</h3>
+              <div className="space-y-2 max-h-80 overflow-y-auto pr-2 font-mono">
+                {ranked.map((r) => (
+                  <div key={r.node_id} className="flex items-center justify-between p-2 rounded bg-slate-950 text-xs border border-slate-800">
+                    <span className="text-slate-200 truncate">{r.reasons.name || r.node_id}</span>
+                    <span className="text-[10px] text-cyan-400">hop: {r.reasons.distance}</span>
                   </div>
-                )}
+                ))}
               </div>
             </div>
-
-            {/* Memory Evidence & Agent Activity Trace */}
-            {memoryAnalysis && (
-              <div className="space-y-4 pt-4 border-t border-slate-800">
-                <MemoryEvidencePanel memories={memoryAnalysis.historical_memories} />
-                <AgentActivityTrace steps={memoryAnalysis.agent_trace} totalLatencyMs={memoryAnalysis.total_latency_ms} />
-              </div>
-            )}
           </div>
         ) : (
           <div className="rounded-2xl border border-slate-800 bg-slate-900/30 p-16 text-center text-slate-500 space-y-2">

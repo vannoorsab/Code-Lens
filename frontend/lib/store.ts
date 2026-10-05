@@ -3,571 +3,533 @@
 import { create } from "zustand";
 import {
   analyzeRepo,
-  fetchBlastRadius,
+  applyFix,
+  createGitHubPR,
+  detectProject,
+  diagnoseExecution,
   fetchExplanation,
-  fetchHindsightOverview,
-  fetchMemoryAwareAnalysis,
-  fetchMemoryComparison,
   fetchViewSpec,
+  generateTests,
+  proposeFix,
   runQuery,
+  searchSymbols,
+  setupDemoSandbox,
+  stopExecution,
 } from "./api";
 import type { SearchHit } from "./search";
 import type {
+  AnalyzeResponse,
   BlastResult,
-  EndpointRef,
-  Explanation,
-  HindsightMemory,
-  HindsightOverview,
-  MemoryAwareAnalysisResult,
-  MemoryComparisonResult,
+  ChangeSummary,
+  DetectedProject,
+  DiagnosisReport,
+  ExplainResponse,
+  LogEntry,
   PipelineStage,
-  QueryResult,
+  ProposedFix,
+  RunFixState,
+  TestSuiteResult,
+  TimelineEvent,
   ViewSpec,
 } from "./types";
 
-
-/** The Graph State Manager (ARCHITECTURE.md: the game-engine model).
- *
- *  One client-side state; every panel reads it; components never fetch on
- *  their own. The phase machine IS the hero moment:
- *
- *    idle -> understanding -> revealing -> exploring
- *
- *  "understanding" replays the pipeline's REAL stages (names and timings come
- *  from the backend's telemetry — honest theater: we replay, never invent).
- *  "revealing" is the assembly animation in real construction order.
- */
-
 export type Phase = "idle" | "understanding" | "revealing" | "exploring";
-
 export type Dimension = "2d" | "3d";
-
-/** Where the reader's choice of view is kept between visits. */
 export const DIMENSION_KEY = "codelens.dimension";
+
+export interface Overlay {
+  query: string;
+  label: string;
+  nodeIds: string[];
+  count?: number;
+  detail?: string;
+  findings?: Array<{ label: string; nodeIds: string[] }>;
+}
 
 interface GraphState {
   phase: Phase;
   error: string | null;
-
-  /** Something the reader asked for did not happen, in one line.
-   *
-   *  `error` belongs to the landing page and is only ever seen while idle, so
-   *  every failure *after* a graph exists had nowhere to go: a level change, a
-   *  dive, a query and an impact all rejected into an unhandled promise and
-   *  left the interface looking exactly as if the click had been ignored.
-   *  Which is the worst way for software to fail — the reader concludes the
-   *  button is broken, or that they imagined pressing it.
-   */
   notice: string | null;
   clearNotice: () => void;
 
   snapshotId: number | null;
   repoUrl: string | null;
   stages: PipelineStage[];
-  stagesShown: number; // how many stage lines the overlay has revealed
+  stagesShown: number;
 
   zoom: number;
   spec: ViewSpec | null;
 
-  /** Assembly reveal: nodes with assembly_index <= revealIndex are visible. */
   revealIndex: number;
   maxAssemblyIndex: number;
 
   selectedId: string | null;
 
-  /** The ripple: blast radius felt as an expanding wave. `rippleFront` is the
-   *  distance the wave has reached; a node lights when its distance <= front. */
   blast: BlastResult | null;
   rippleFor: string | null;
   rippleFront: number;
   maxRippleDistance: number;
-  /** The HTTP routes this change reaches. Fetched beside the blast radius so
-   *  the readout can say `POST /checkout` rather than a file count — the
-   *  difference between a number to interpret and a decision. */
-  rippleEndpoints: EndpointRef[];
 
   analyze: (source: string) => Promise<void>;
-  /** Resolves `false` when the level could not be loaded, so a caller in the
-   *  middle of a longer move — a dive, a search landing — can stop rather
-   *  than carry on against a level that never arrived. */
   setZoom: (zoom: number) => Promise<boolean>;
   advanceStage: () => void;
   beginReveal: () => void;
   advanceReveal: () => void;
-  skipReveal: () => void; // every animation interruptible (EXPERIENCE)
+  skipReveal: () => void;
   select: (id: string | null) => void;
   showRipple: (nodeId: string) => Promise<void>;
   advanceRipple: () => void;
   clearRipple: () => void;
 
-  /** Why the project needs the selected file or folder. Deterministic facts,
-   *  no API key required.
-   *
-   *  Fetched by `select` rather than by a button: the inspector shows real
-   *  numbers the instant something is selected, and there is no state where a
-   *  panel is open but empty waiting for a click. */
-  explanation: Explanation | null;
+  explanation: ExplainResponse | null;
   explaining: string | null;
   explainError: string | null;
-  /** Whether the inspector is showing the full detail or just the summary.
-   *  The deep content is one click away, never permanently on screen. */
   detailOpen: boolean;
   toggleDetail: () => void;
   closeInspector: () => void;
 
-  /** ⌘K. The whole point of a minimal interface is that power lives here
-   *  rather than in permanent chrome. */
   paletteOpen: boolean;
   setPalette: (open: boolean) => void;
 
-  /** Flat or deep.
-   *
-   *  Not a different product — the same ViewSpec, the same choreography, the
-   *  same encodings. The deep view adds one axis the flat one cannot draw:
-   *  height is how far down the import stack a file sits. A preference, and
-   *  nothing about the data changes with it.
-   *
-   *  Starts flat on purpose, and **must** start flat rather than reading
-   *  storage here: the top bar renders on the server, and a stored value read
-   *  at module scope would make the first client render disagree with it.
-   *  `HUD` restores the reader's choice in an effect instead.
-   */
   dimension: Dimension;
   setDimension: (dimension: Dimension) => void;
 
-  /** The Graph Guide. Shown once unprompted on a first graph, then on
-   *  request only — L1/L2/L3 is the least self-explanatory thing here and
-   *  the explanation is worth exactly one interruption. */
   guideOpen: boolean;
   setGuide: (open: boolean) => void;
 
-  /** The dive. Going a level deeper *at a place* rather than switching a tab:
-   *  the camera holds the district you opened while the new level assembles
-   *  around it, so L1 → L2 → L3 reads as travel instead of navigation.
-   *
-   *  `pendingFocus` is the cluster the next spec should be framed on. The
-   *  renderer consumes it once the new level has arrived and clears it. */
   pendingFocus: string | null;
   dive: (nodeId: string) => Promise<void>;
   consumeFocus: () => void;
-
-  /** Search, as navigation.
-   *
-   *  A hit is a place on the map, so choosing one has to *arrive* — and the
-   *  level showing files cannot draw a function, nor L1 a file. Picking a
-   *  result therefore moves the camera and, when it has to, the depth: the
-   *  shallowest level that can actually draw the thing asked for. Without
-   *  this, half of every search silently did nothing.
-   */
   goTo: (hit: SearchHit) => Promise<void>;
 
-  /** A query's answer, drawn ON the graph.
-   *
-   *  This is the rule that keeps the product one canvas: a query never opens
-   *  a table. `cycles` isolates its loops, `risk` lights the risky files,
-   *  `untested_hubs` shows the gap. The overlay is just a set of node ids the
-   *  renderer treats as "the answer"; everything else recedes. */
   overlay: Overlay | null;
   runOverlay: (name: string, label: string, params?: Record<string, unknown>) => Promise<void>;
   clearOverlay: () => void;
   overlayError: string | null;
 
-  // ── Hindsight Memory Engine ───────────────────────────────────────────
-  memoryMode: "MEMORY_ON" | "MEMORY_OFF";
-  toggleMemoryMode: () => void;
+  // ══════════════════════════════════════════════════════════════════════════
+  // ── CODELENS RUNFIX AGENT STATE & ACTIONS ─────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  runFix: RunFixState;
+  logs: LogEntry[];
+  activeExecutionId: string | null;
+  isStreaming: boolean;
+  workspacePath: string;
 
-  memoryAnalysis: MemoryAwareAnalysisResult | null;
-  memoryOverview: HindsightOverview | null;
-  memoryComparison: MemoryComparisonResult | null;
-
-  memoryCenterOpen: boolean;
-  setMemoryCenterOpen: (open: boolean) => void;
-
-  memoryDetailMemory: HindsightMemory | null;
-  setMemoryDetailMemory: (memory: HindsightMemory | null) => void;
-
-  runMemoryAwareAnalysis: (nodeId: string) => Promise<void>;
-  runMemoryComparison: (queryText: string) => Promise<void>;
-  loadMemoryOverview: () => Promise<void>;
+  setWorkspacePath: (path: string) => void;
+  clearLogs: () => void;
+  detectCurrentProject: (path?: string) => Promise<void>;
+  runProjectCommand: (cmdOverride?: string) => Promise<void>;
+  stopActiveProcess: () => Promise<void>;
+  runDiagnosis: () => Promise<void>;
+  generateFix: () => Promise<void>;
+  applyFixPatch: () => Promise<boolean>;
+  generateTestSuite: () => Promise<void>;
+  startAutonomousLoop: (mode?: "autonomous" | "manual", cmdOverride?: string) => Promise<void>;
+  loadDemoBrokenProject: (type?: "react" | "python") => Promise<void>;
+  createPullRequest: () => Promise<ChangeSummary | null>;
 }
-
-
-export interface Overlay {
-  query: string;
-  label: string;
-  /** Every node the answer touches. */
-  nodeIds: string[];
-  /** For findings made of several distinct groups — each cycle is one group —
-   *  so the renderer can tell them apart instead of showing one blob. */
-  groups: string[][];
-  /** One line of plain English, from the query's own `explanation`. */
-  detail: string;
-  count: number;
-}
-
-/** Monotonic id of the latest level request; see `setZoom`. */
-let zoomRequest = 0;
 
 export const useGraphStore = create<GraphState>((set, get) => ({
   phase: "idle",
   error: null,
   notice: null,
   clearNotice: () => set({ notice: null }),
+
   snapshotId: null,
   repoUrl: null,
   stages: [],
   stagesShown: 0,
-  zoom: 2,
+
+  zoom: 1,
   spec: null,
-  revealIndex: -1,
+
+  revealIndex: 0,
   maxAssemblyIndex: 0,
+
   selectedId: null,
+
   blast: null,
   rippleFor: null,
   rippleFront: 0,
   maxRippleDistance: 0,
-  rippleEndpoints: [],
-
-  analyze: async (source: string) => {
-    set({
-      phase: "understanding",
-      error: null,
-      notice: null,
-      stages: [],
-      stagesShown: 0,
-      spec: null,
-    });
-    try {
-      const result = await analyzeRepo(source);
-      const spec = await fetchViewSpec(result.snapshot_id, get().zoom);
-      const maxAssembly = Math.max(0, ...spec.nodes.map((n) => n.assembly_index));
-      set({
-        snapshotId: result.snapshot_id,
-        repoUrl: result.repo_url,
-        stages: result.stages,
-        spec,
-        maxAssemblyIndex: maxAssembly,
-        revealIndex: -1,
-        selectedId: null,
-        blast: null,
-        rippleFor: null,
-      });
-      // The overlay now replays the real stages; it calls beginReveal() when
-      // the last line has landed.
-    } catch (error) {
-      set({ phase: "idle", error: (error as Error).message });
-    }
-  },
-
-  setZoom: async (zoom: number) => {
-    const { snapshotId } = get();
-    if (snapshotId === null) return false;
-    // Press 3 then 2 quickly and both fetches go out; without this, whichever
-    // answered *last* won, so the level on screen could be the one pressed
-    // first. Only the most recent request is allowed to land.
-    const request = ++zoomRequest;
-    let spec: ViewSpec;
-    try {
-      spec = await fetchViewSpec(snapshotId, zoom);
-    } catch (failure) {
-      if (request !== zoomRequest) return false; // superseded: say nothing
-      // Nothing has changed yet — `zoom` is only committed below, on success —
-      // so the level buttons still show where the reader actually is. All that
-      // is missing is saying so.
-      set({
-        notice: `Could not open L${zoom} — ${(failure as Error).message}`,
-      });
-      return false;
-    }
-    if (request !== zoomRequest) return false; // a later press has taken over
-    set({
-      notice: null,
-      zoom,
-      spec,
-      // Zoom switches are instant: the reveal belongs to the first arrival.
-      revealIndex: Math.max(0, ...spec.nodes.map((n) => n.assembly_index)),
-      maxAssemblyIndex: Math.max(0, ...spec.nodes.map((n) => n.assembly_index)),
-      // A ripple is tied to one zoom's node ids; drop it on a level change.
-      blast: null,
-      rippleFor: null,
-      selectedId: null,
-    });
-    return true;
-  },
-
-  advanceStage: () => set((s) => ({ stagesShown: Math.min(s.stagesShown + 1, s.stages.length) })),
-
-  beginReveal: () => set({ phase: "revealing", revealIndex: 0 }),
-
-  advanceReveal: () => {
-    const { revealIndex, maxAssemblyIndex } = get();
-    if (revealIndex >= maxAssemblyIndex) {
-      set({ phase: "exploring" });
-      return;
-    }
-    set({ revealIndex: revealIndex + 1 });
-  },
-
-  skipReveal: () =>
-    set((s) => ({ phase: "exploring", revealIndex: s.maxAssemblyIndex })),
-
-  // Selecting a different node ends any ripple in progress, and immediately
-  // asks the graph what this node is. A cluster is a view-layer invention
-  // with no node of its own, so the question goes to its `explain_id`.
-  select: (id) => {
-    set({
-      selectedId: id,
-      blast: null,
-      rippleFor: null,
-      explanation: null,
-      explainError: null,
-      detailOpen: false,
-      explaining: id,
-    });
-    if (id === null) return;
-    const { snapshotId, spec } = get();
-    if (snapshotId === null) return;
-    const node = spec?.nodes.find((candidate) => candidate.id === id);
-    const target = node?.explain_id ?? id;
-    void fetchExplanation(snapshotId, target)
-      .then((explanation) => {
-        // Ignore a stale response if the user moved on to another node.
-        if (get().selectedId === id) set({ explanation });
-      })
-      .catch((error: Error) => {
-        if (get().selectedId === id) set({ explainError: error.message });
-      });
-  },
-
-  showRipple: async (nodeId: string) => {
-    const { snapshotId } = get();
-    if (snapshotId === null) return;
-    // Endpoints are a second question about the same change; asking both at
-    // once means the wave never arrives at a readout that is still loading.
-    let blast: BlastResult;
-    let endpoints: QueryResult | null;
-    try {
-      [blast, endpoints] = await Promise.all([
-        fetchBlastRadius(snapshotId, nodeId),
-        runQuery(snapshotId, "endpoints", { node_id: nodeId }).catch(() => null),
-      ]);
-    } catch (failure) {
-      set({ notice: `Could not trace the impact — ${(failure as Error).message}` });
-      return;
-    }
-    const maxDistance = Math.max(
-      1,
-      ...blast.ranked.map((entry) => entry.reasons.distance),
-    );
-    set({
-      notice: null,
-      blast,
-      rippleFor: nodeId,
-      selectedId: nodeId,
-      // Starts at 1, not 0. The direct dependents are the answer to
-      // "what breaks if I change this" and they should be on screen the
-      // instant it is asked; starting at 0 spent the first 320ms showing
-      // "0 files" under a question the graph had already answered.
-      rippleFront: 1,
-      maxRippleDistance: maxDistance,
-      rippleEndpoints: (endpoints?.meta.endpoints as EndpointRef[] | undefined) ?? [],
-    });
-  },
-
-  advanceRipple: () => {
-    const { rippleFront, maxRippleDistance } = get();
-    if (rippleFront >= maxRippleDistance) return; // wave has reached the edge
-    set({ rippleFront: rippleFront + 1 });
-  },
-
-  clearRipple: () =>
-    set({ blast: null, rippleFor: null, rippleFront: 0, rippleEndpoints: [] }),
 
   explanation: null,
   explaining: null,
   explainError: null,
   detailOpen: false,
 
-  toggleDetail: () => set((s) => ({ detailOpen: !s.detailOpen })),
-
-  closeInspector: () =>
-    set({
-      selectedId: null,
-      explanation: null,
-      explaining: null,
-      explainError: null,
-      detailOpen: false,
-      blast: null,
-      rippleFor: null,
-    }),
-
   paletteOpen: false,
   setPalette: (open) => set({ paletteOpen: open }),
+
+  dimension: "2d",
+  setDimension: (dimension) => {
+    try {
+      localStorage.setItem(DIMENSION_KEY, dimension);
+    } catch {}
+    set({ dimension });
+  },
 
   guideOpen: false,
   setGuide: (open) => set({ guideOpen: open }),
 
-  dimension: "2d",
-  setDimension: (dimension) => {
-    set({ dimension });
-    try {
-      window.localStorage.setItem(DIMENSION_KEY, dimension);
-    } catch {
-      /* storage disabled — the choice still holds for this session */
-    }
-  },
-
   pendingFocus: null,
-  consumeFocus: () => set({ pendingFocus: null }),
-
-  dive: async (nodeId: string) => {
-    const { zoom, spec } = get();
-    if (zoom >= 3) return; // L3 is the floor; there is nothing under a symbol
-    const node = spec?.nodes.find((candidate) => candidate.id === nodeId);
-    if (!node) return;
-    // A district's own key is its cluster; a file's is the district holding
-    // it. Either way the next level is framed on the same region of the repo,
-    // which is what makes the movement read as going *inward* rather than
-    // sideways to another view.
-    set({ pendingFocus: node.kind === "cluster" ? node.label : node.cluster });
-    // A focus that outlives a failed dive is worse than no focus: the next
-    // level change to succeed would silently frame itself on a district the
-    // reader asked about minutes ago.
-    if (!(await get().setZoom(zoom + 1))) set({ pendingFocus: null });
-  },
-
-  goTo: async (hit) => {
-    const { spec, zoom } = get();
-    // Symbols only exist at L3; files and modules first appear at L2. If the
-    // level on screen already draws the hit — or the file holding it, which
-    // is how a symbol is represented one level up — stay where the reader is.
-    const target = hit.kind === "function" || hit.kind === "class" ? 3 : 2;
-    if (!drawable(spec, hit) && zoom !== target) {
-      // Selecting into a level that failed to load would light nothing and
-      // say nothing. `setZoom` has already explained itself; stop here.
-      // `false` also covers being overtaken: if the reader dived or pressed
-      // a level key while this was in flight, that later request owns the
-      // screen and this landing stands down rather than completing on top.
-      if (!(await get().setZoom(target))) return;
-    }
-    // The graph foregrounds one answer at a time; landing a search on a node
-    // an overlay has dimmed is arriving in the dark. And arriving anywhere
-    // clears the last thing that did not work.
-    set({ paletteOpen: false, overlay: null, overlayError: null, notice: null });
-    get().select(hit.id);
-  },
-
   overlay: null,
   overlayError: null,
 
-  runOverlay: async (name, label, params = {}) => {
-    const { snapshotId } = get();
-    if (snapshotId === null) return;
-    set({
-      paletteOpen: false,
-      overlayError: null,
-      // Anything that works clears the last thing that did not: a notice
-      // about a failure the reader has already moved past is just noise.
-      notice: null,
-      selectedId: null,
-      blast: null,
-      rippleFor: null,
-    });
+  // ── RunFix Initial State ──────────────────────────────────────────────────
+  runFix: {
+    state: "IDLE",
+    iteration: 0,
+    max_iterations: 5,
+    project: null,
+    latest_diagnosis: null,
+    latest_fix: null,
+    latest_tests: null,
+    change_summary: null,
+    timeline: [],
+    is_autonomous: false,
+    is_repaired: false,
+  },
+  logs: [],
+  activeExecutionId: null,
+  isStreaming: false,
+  workspacePath: ".",
+
+  setWorkspacePath: (path) => set({ workspacePath: path }),
+  clearLogs: () => set({ logs: [] }),
+
+  analyze: async (source: string) => {
+    set({ phase: "understanding", error: null, stages: [], stagesShown: 0 });
     try {
-      const result = await runQuery(snapshotId, name, params);
-      const groups = groupsFor(name, result);
-      const nodeIds = groups.length > 0 ? [...new Set(groups.flat())] : result.node_ids;
+      const resp = await analyzeRepo(source);
+      const spec = await fetchViewSpec(resp.snapshot_id, 1);
+      const maxAssembly = Math.max(...spec.nodes.map((n) => n.assembly_index), 0);
+
       set({
-        overlay: {
-          query: name,
-          label,
-          nodeIds,
-          groups,
-          detail: typeof result.meta.explanation === "string" ? result.meta.explanation : "",
-          count:
-            typeof result.meta.total === "number" ? result.meta.total : nodeIds.length,
-        },
+        snapshotId: resp.snapshot_id,
+        repoUrl: resp.repo_url,
+        stages: resp.stages,
+        spec,
+        maxAssemblyIndex: maxAssembly,
       });
-      // Findings are about files, and L1 draws districts. Dropping to the
-      // level where the answer is actually visible is the difference between
-      // an overlay and a shrug.
-      if (nodeIds.length > 0 && get().zoom === 1) await get().setZoom(2);
-    } catch (error) {
-      // `overlayError` was set here and rendered by nobody, so a query that
-      // failed looked exactly like a query that found nothing.
-      const message = (error as Error).message;
-      set({ overlayError: message, notice: `Could not run that query — ${message}` });
+    } catch (err: any) {
+      set({ phase: "idle", error: err.message || "Failed to analyze repository." });
+    }
+  },
+
+  setZoom: async (zoom: number) => {
+    const { snapshotId } = get();
+    if (!snapshotId) return false;
+    try {
+      const spec = await fetchViewSpec(snapshotId, zoom);
+      set({ zoom, spec });
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  advanceStage: () => {
+    const { stagesShown, stages } = get();
+    if (stagesShown < stages.length) {
+      set({ stagesShown: stagesShown + 1 });
+    }
+  },
+
+  beginReveal: () => set({ phase: "revealing", revealIndex: 0 }),
+  advanceReveal: () => {
+    const { revealIndex, maxAssemblyIndex } = get();
+    if (revealIndex < maxAssemblyIndex) {
+      set({ revealIndex: revealIndex + 1 });
+    } else {
+      set({ phase: "exploring" });
+    }
+  },
+  skipReveal: () => set({ phase: "exploring", revealIndex: get().maxAssemblyIndex }),
+
+  select: async (id: string | null) => {
+    set({ selectedId: id, explanation: null, explaining: id, explainError: null });
+    if (!id) return;
+    const { snapshotId } = get();
+    if (!snapshotId) return;
+    try {
+      const exp = await fetchExplanation(snapshotId, id);
+      set({ explanation: exp, explaining: null });
+    } catch (err: any) {
+      set({ explainError: err.message, explaining: null });
+    }
+  },
+
+  showRipple: async (nodeId: string) => {
+    const { snapshotId } = get();
+    if (!snapshotId) return;
+    try {
+      const blast = await runQuery(snapshotId, "blast_radius", nodeId);
+      const maxDist = Math.max(...blast.ranked.map((r) => r.reasons.distance), 1);
+      set({ blast, rippleFor: nodeId, rippleFront: 0, maxRippleDistance: maxDist });
+    } catch (err: any) {
+      set({ notice: err.message });
+    }
+  },
+
+  advanceRipple: () => {
+    const { rippleFront, maxRippleDistance } = get();
+    if (rippleFront < maxRippleDistance) {
+      set({ rippleFront: rippleFront + 1 });
+    }
+  },
+
+  clearRipple: () => set({ blast: null, rippleFor: null, rippleFront: 0 }),
+
+  toggleDetail: () => set((s) => ({ detailOpen: !s.detailOpen })),
+  closeInspector: () => set({ selectedId: null, explanation: null }),
+
+  dive: async (nodeId: string) => {
+    const { setZoom } = get();
+    set({ pendingFocus: nodeId });
+    await setZoom(2);
+  },
+
+  consumeFocus: () => set({ pendingFocus: null }),
+
+  goTo: async (hit: SearchHit) => {
+    const { setZoom, select } = get();
+    if (hit.kind === "module" || hit.kind === "cluster") {
+      await setZoom(1);
+    } else if (hit.kind === "file") {
+      await setZoom(2);
+    } else {
+      await setZoom(3);
+    }
+    select(hit.id);
+  },
+
+  runOverlay: async (name: string, label: string, params?: Record<string, unknown>) => {
+    const { snapshotId } = get();
+    if (!snapshotId) return;
+    try {
+      const res = await runQuery(snapshotId, name, params?.target as string | undefined);
+      const nodeIds = res.ranked.map((r) => r.node_id);
+      set({ overlay: { query: name, label, nodeIds }, overlayError: null });
+    } catch (err: any) {
+      set({ overlayError: err.message });
     }
   },
 
   clearOverlay: () => set({ overlay: null, overlayError: null }),
 
-  memoryMode: "MEMORY_ON",
-  toggleMemoryMode: () =>
-    set((s) => ({ memoryMode: s.memoryMode === "MEMORY_ON" ? "MEMORY_OFF" : "MEMORY_ON" })),
+  // ══════════════════════════════════════════════════════════════════════════
+  // ── RUNFIX ACTIONS ────────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
 
-  memoryAnalysis: null,
-  memoryOverview: null,
-  memoryComparison: null,
-  memoryCenterOpen: false,
-  setMemoryCenterOpen: (open) => set({ memoryCenterOpen: open }),
-  memoryDetailMemory: null,
-  setMemoryDetailMemory: (memory) => set({ memoryDetailMemory: memory }),
-
-  runMemoryAwareAnalysis: async (nodeId: string) => {
-    const { snapshotId, memoryMode } = get();
-    if (snapshotId === null) return;
+  detectCurrentProject: async (pathOverride?: string) => {
+    const targetPath = pathOverride || get().workspacePath;
     try {
-      const res = await fetchMemoryAwareAnalysis(snapshotId, nodeId, memoryMode);
-      set({ memoryAnalysis: res });
-    } catch (failure) {
-      set({ notice: `Memory analysis failed — ${(failure as Error).message}` });
+      const proj = await detectProject(targetPath);
+      set((s) => ({
+        runFix: { ...s.runFix, project: proj },
+        workspacePath: targetPath,
+      }));
+    } catch (err: any) {
+      set({ notice: `Project detection failed: ${err.message}` });
     }
   },
 
-  runMemoryComparison: async (queryText: string) => {
-    const { snapshotId, selectedId } = get();
-    if (snapshotId === null) return;
+  runProjectCommand: async (cmdOverride?: string) => {
+    const { runFix, workspacePath } = get();
+    const cmd = cmdOverride || runFix.project?.run_command || "npm run dev";
+    set({ isStreaming: true });
+
     try {
-      const res = await fetchMemoryComparison(snapshotId, queryText, selectedId ?? undefined);
-      set({ memoryComparison: res });
-    } catch (failure) {
-      set({ notice: `Memory comparison failed — ${(failure as Error).message}` });
+      const response = await fetch("/api/runfix/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command: cmd, workspace_path: workspacePath }),
+      });
+
+      if (!response.body) throw new Error("No response stream");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split("\n");
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.type === "session_created") {
+                set({ activeExecutionId: data.execution_id });
+              } else if (data.type === "log" && data.log) {
+                set((s) => ({ logs: [...s.logs, data.log] }));
+              }
+            } catch {}
+          }
+        }
+      }
+    } catch (err: any) {
+      set({ notice: `Run error: ${err.message}` });
+    } finally {
+      set({ isStreaming: false });
     }
   },
 
-  loadMemoryOverview: async () => {
-    const { snapshotId } = get();
-    if (snapshotId === null) return;
+  stopActiveProcess: async () => {
+    const { activeExecutionId } = get();
+    if (!activeExecutionId) return;
     try {
-      const overview = await fetchHindsightOverview(snapshotId);
-      set({ memoryOverview: overview });
-    } catch (failure) {
-      set({ notice: `Could not load memory overview — ${(failure as Error).message}` });
+      await stopExecution(activeExecutionId);
+      set({ isStreaming: false });
+    } catch {}
+  },
+
+  runDiagnosis: async () => {
+    const { runFix, logs, workspacePath } = get();
+    const cmd = runFix.project?.run_command || "npm run dev";
+    const stdout = logs.filter((l) => l.stream === "stdout").map((l) => l.text).join("\n");
+    const stderr = logs.filter((l) => l.stream === "stderr").map((l) => l.text).join("\n");
+
+    try {
+      const diag = await diagnoseExecution(cmd, 1, stdout, stderr, workspacePath);
+      set((s) => ({
+        runFix: { ...s.runFix, latest_diagnosis: diag, state: "DIAGNOSING" },
+      }));
+    } catch (err: any) {
+      set({ notice: `Diagnosis failed: ${err.message}` });
+    }
+  },
+
+  generateFix: async () => {
+    const { runFix, workspacePath } = get();
+    if (!runFix.latest_diagnosis) return;
+    try {
+      const fix = await proposeFix(runFix.latest_diagnosis, workspacePath);
+      set((s) => ({
+        runFix: { ...s.runFix, latest_fix: fix, state: "FIX_PROPOSED" },
+      }));
+    } catch (err: any) {
+      set({ notice: `Fix synthesis failed: ${err.message}` });
+    }
+  },
+
+  applyFixPatch: async () => {
+    const { runFix, workspacePath } = get();
+    if (!runFix.latest_fix) return false;
+    try {
+      const result = await applyFix(runFix.latest_fix, workspacePath);
+      if (!result.success) throw new Error("The server did not apply the proposed patch.");
+      set((s) => ({
+        runFix: {
+          ...s.runFix,
+          latest_fix: s.runFix.latest_fix ? { ...s.runFix.latest_fix, status: "APPLIED" } : null,
+          state: "APPLYING_FIX",
+        },
+      }));
+      return true;
+    } catch (err: any) {
+      set({ notice: `Failed to apply fix: ${err.message}` });
+      return false;
+    }
+  },
+
+  generateTestSuite: async () => {
+    const { runFix, workspacePath } = get();
+    if (!runFix.latest_fix) return;
+    try {
+      const tests = await generateTests(runFix.latest_fix, workspacePath);
+      set((s) => ({
+        runFix: { ...s.runFix, latest_tests: tests, state: "TESTING" },
+      }));
+    } catch (err: any) {
+      set({ notice: `Test generation failed: ${err.message}` });
+    }
+  },
+
+  startAutonomousLoop: async (mode = "autonomous", cmdOverride?: string) => {
+    const { workspacePath } = get();
+    set({ isStreaming: true, logs: [] });
+
+    try {
+      const response = await fetch("/api/runfix/auto", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspace_path: workspacePath,
+          mode,
+          command: cmdOverride || null,
+        }),
+      });
+
+      if (!response.body) throw new Error("No response stream");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split("\n");
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.type === "log" && data.log) {
+                set((s) => ({ logs: [...s.logs, data.log] }));
+              } else if (data.type === "timeline" && data.event) {
+                set((s) => ({
+                  runFix: {
+                    ...s.runFix,
+                    ...data.state,
+                    timeline: [...(s.runFix.timeline || []), data.event],
+                  },
+                }));
+              } else if (data.state) {
+                set((s) => ({ runFix: { ...s.runFix, ...data.state } }));
+              }
+            } catch {}
+          }
+        }
+      }
+    } catch (err: any) {
+      set({ notice: `Autonomous RunFix error: ${err.message}` });
+    } finally {
+      set({ isStreaming: false });
+    }
+  },
+
+  loadDemoBrokenProject: async (type = "react") => {
+    set({ isStreaming: true });
+    try {
+      const res = await setupDemoSandbox(type);
+      set({ workspacePath: res.workspace_path });
+      await get().detectCurrentProject(res.workspace_path);
+      set({ notice: res.message });
+    } catch (err: any) {
+      set({ notice: `Failed to load demo project: ${err.message}` });
+    } finally {
+      set({ isStreaming: false });
+    }
+  },
+
+  createPullRequest: async () => {
+    const { runFix } = get();
+    if (!runFix.latest_fix || !runFix.project) return null;
+    try {
+      const prSummary = await createGitHubPR(
+        runFix.project.name,
+        runFix.latest_fix,
+        runFix.latest_tests || undefined,
+      );
+      set((s) => ({
+        runFix: { ...s.runFix, change_summary: prSummary },
+      }));
+      return prSummary;
+    } catch (err: any) {
+      set({ notice: `Failed to generate PR summary: ${err.message}` });
+      return null;
     }
   },
 }));
-
-
-/** Can the level currently on screen show this hit at all?
- *
- *  Either as itself, or as the file that contains it — the substitution the
- *  renderer and the ripple both already make for a symbol at L2.
- */
-function drawable(spec: ViewSpec | null, hit: SearchHit): boolean {
-  if (!spec) return false;
-  return spec.nodes.some(
-    (node) => node.id === hit.id || (!!hit.path && node.id === `file:${hit.path}`),
-  );
-}
-
-/** Some answers are made of distinct groups rather than one set. A cycle is
- *  only meaningful as a loop, so the renderer needs them kept apart. */
-function groupsFor(name: string, result: QueryResult): string[][] {
-  if (name !== "cycles") return [];
-  const cycles = result.meta.cycles;
-  if (!Array.isArray(cycles)) return [];
-  return cycles.map((cycle) =>
-    ((cycle as { files?: { id: string }[] }).files ?? []).map((file) => file.id),
-  );
-}

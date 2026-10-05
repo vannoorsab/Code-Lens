@@ -8,8 +8,6 @@ import GraphGuide from "@/components/GraphGuide";
 import HUD from "@/components/HUD";
 import NodeInspector from "@/components/NodeInspector";
 import UnderstandingOverlay from "@/components/UnderstandingOverlay";
-import MemoryCenterModal from "@/components/MemoryCenterModal";
-
 // Both renderers need the browser's WebGL context; never render either on
 // the server. Splitting them also keeps three.js out of the bundle a reader
 // who never opens the deep view has to download.
@@ -37,7 +35,6 @@ export default function Home() {
       <NodeInspector />
       <CommandPalette />
       <GraphGuide />
-      <MemoryCenterModal />
     </main>
   );
 }

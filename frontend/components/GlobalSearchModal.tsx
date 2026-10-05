@@ -3,27 +3,30 @@
 import React, { useState, useEffect } from "react";
 import { useGraphStore } from "@/lib/store";
 import { useRouter } from "next/navigation";
-import { searchRepo } from "@/lib/api";
+import { searchSymbols } from "@/lib/api";
 
 interface GlobalSearchModalProps {
+  isOpen?: boolean;
   onClose: () => void;
 }
 
-export default function GlobalSearchModal({ onClose }: GlobalSearchModalProps) {
+export default function GlobalSearchModal({ isOpen = true, onClose }: GlobalSearchModalProps) {
   const router = useRouter();
   const snapshotId = useGraphStore((s) => s.snapshotId);
-  const overview = useGraphStore((s) => s.memoryOverview);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
 
   useEffect(() => {
     if (!query.trim() || snapshotId === null) {
@@ -33,8 +36,8 @@ export default function GlobalSearchModal({ onClose }: GlobalSearchModalProps) {
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
-        const res = await searchRepo(snapshotId, query, 10);
-        setHits(res.ranked || []);
+        const res = await searchSymbols(snapshotId, query, 10);
+        setHits(res || []);
       } catch {
         setHits([]);
       } finally {
@@ -45,32 +48,24 @@ export default function GlobalSearchModal({ onClose }: GlobalSearchModalProps) {
   }, [query, snapshotId]);
 
   const navRoutes = [
-    { label: "Overview Dashboard", path: "/dashboard", icon: "📊" },
+    { label: "Dashboard", path: "/dashboard", icon: "📊" },
+    { label: "Run & Fix Studio", path: "/runfix", icon: "⚡" },
+    { label: "Terminal Console", path: "/terminal", icon: "💻" },
+    { label: "Changes & Diff", path: "/changes", icon: "📝" },
+    { label: "Test Suites", path: "/tests", icon: "🧪" },
     { label: "Code Explorer", path: "/explorer", icon: "📂" },
     { label: "Knowledge Graph", path: "/graph", icon: "🕸️" },
     { label: "Blast Radius", path: "/blast-radius", icon: "💥" },
-    { label: "AI Agent", path: "/agent", icon: "🤖" },
-    { label: "Memory Center", path: "/memory", icon: "🧠" },
-    { label: "Learning Center", path: "/learning", icon: "📈" },
-    { label: "Change Simulator", path: "/simulator", icon: "⚡" },
     { label: "Architecture", path: "/architecture", icon: "🏛️" },
     { label: "Git Intelligence", path: "/git", icon: "🌿" },
     { label: "Risk Center", path: "/risks", icon: "⚠️" },
-    { label: "Team Knowledge", path: "/team", icon: "👥" },
-    { label: "Agent Activity", path: "/activity", icon: "⚡" },
+    { label: "Agent Activity", path: "/activity", icon: "🤖" },
     { label: "Settings", path: "/settings", icon: "⚙️" },
     { label: "About", path: "/about", icon: "ℹ️" },
   ].filter((r) => !query || r.label.toLowerCase().includes(query.toLowerCase()));
 
-  const memories = (overview?.recent_memories || []).filter(
-    (m) =>
-      !query ||
-      m.description.toLowerCase().includes(query.toLowerCase()) ||
-      m.category.toLowerCase().includes(query.toLowerCase())
-  );
-
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/80 p-4 pt-20 backdrop-blur-md">
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/80 p-4 pt-20 backdrop-blur-md font-sans">
       <div className="w-full max-w-2xl rounded-xl border border-slate-800 bg-slate-950 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
         {/* Search Input Bar */}
         <div className="flex items-center gap-3 border-b border-slate-800 px-4 py-3 bg-slate-900/80">
@@ -78,12 +73,12 @@ export default function GlobalSearchModal({ onClose }: GlobalSearchModalProps) {
           <input
             type="text"
             autoFocus
-            placeholder="Search code symbols, files, memories, pages..."
+            placeholder="Search code symbols, files, actions, pages..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="flex-1 bg-transparent text-sm text-slate-100 placeholder-slate-500 outline-none"
+            className="flex-1 bg-transparent text-sm text-slate-100 placeholder-slate-500 outline-none font-mono"
           />
-          <button onClick={onClose} className="rounded p-1 text-slate-500 hover:text-white text-xs">
+          <button onClick={onClose} className="rounded px-1.5 py-0.5 bg-slate-800 text-slate-400 hover:text-white text-xs font-mono">
             ESC
           </button>
         </div>
@@ -96,17 +91,17 @@ export default function GlobalSearchModal({ onClose }: GlobalSearchModalProps) {
           {navRoutes.length > 0 && (
             <div>
               <span className="text-[10px] font-mono font-semibold uppercase text-slate-500 tracking-wider">
-                Pages & Views
+                Pages & Actions
               </span>
               <div className="mt-2 grid grid-cols-2 gap-1.5">
-                {navRoutes.slice(0, 6).map((nav) => (
+                {navRoutes.slice(0, 8).map((nav) => (
                   <button
                     key={nav.path}
                     onClick={() => {
                       router.push(nav.path);
                       onClose();
                     }}
-                    className="flex items-center gap-2 rounded-lg border border-slate-850 bg-slate-900/60 p-2 text-xs text-slate-300 hover:border-cyan-800 hover:bg-slate-900 hover:text-white transition-all text-left"
+                    className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-2 text-xs text-slate-300 hover:border-cyan-800 hover:bg-slate-900 hover:text-white transition-all text-left"
                   >
                     <span>{nav.icon}</span>
                     <span className="truncate">{nav.label}</span>
@@ -125,51 +120,24 @@ export default function GlobalSearchModal({ onClose }: GlobalSearchModalProps) {
               <div className="mt-2 space-y-1.5">
                 {hits.map((hit: any) => (
                   <div
-                    key={hit.node_id}
+                    key={hit.id || hit.node_id}
                     onClick={() => {
-                      router.push(`/explorer?node=${encodeURIComponent(hit.node_id)}`);
+                      router.push(`/explorer?node=${encodeURIComponent(hit.id || hit.node_id)}`);
                       onClose();
                     }}
                     className="cursor-pointer rounded-lg border border-slate-800 bg-slate-900/40 p-2.5 hover:border-cyan-700 hover:bg-slate-900 transition-all"
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-mono text-xs font-semibold text-slate-200">
-                        {hit.reasons?.name || hit.node_id}
+                        {hit.label || hit.name || hit.id}
                       </span>
                       <span className="rounded bg-slate-950 px-1.5 py-0.5 font-mono text-[10px] text-slate-500 border border-slate-800">
-                        {hit.reasons?.kind || "node"}
+                        {hit.kind || "node"}
                       </span>
                     </div>
-                    {hit.reasons?.file_path && (
-                      <p className="mt-1 font-mono text-[10px] text-slate-500">{hit.reasons.file_path}</p>
+                    {hit.file_path && (
+                      <p className="mt-1 font-mono text-[10px] text-slate-500">{hit.file_path}</p>
                     )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Hindsight Memories */}
-          {memories.length > 0 && (
-            <div>
-              <span className="text-[10px] font-mono font-semibold uppercase text-purple-400 tracking-wider">
-                Recalled Hindsight Memories
-              </span>
-              <div className="mt-2 space-y-1.5">
-                {memories.slice(0, 4).map((mem) => (
-                  <div
-                    key={mem.id}
-                    onClick={() => {
-                      router.push("/memory");
-                      onClose();
-                    }}
-                    className="cursor-pointer rounded-lg border border-purple-950/60 bg-purple-950/20 p-2.5 hover:border-purple-800 transition-all"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-mono text-[10px] text-purple-300 uppercase">{mem.category}</span>
-                      {mem.outcome && <span className="font-mono text-[10px] text-emerald-400">{mem.outcome}</span>}
-                    </div>
-                    <p className="mt-1 text-xs text-slate-200 line-clamp-2">{mem.description}</p>
                   </div>
                 ))}
               </div>

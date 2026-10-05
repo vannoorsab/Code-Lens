@@ -33,7 +33,6 @@ export default function HUD() {
   const setPalette = useGraphStore((s) => s.setPalette);
   const setGuide = useGraphStore((s) => s.setGuide);
   const rippleFront = useGraphStore((s) => s.rippleFront);
-  const rippleEndpoints = useGraphStore((s) => s.rippleEndpoints);
   const dimension = useGraphStore((s) => s.dimension);
   const setDimension = useGraphStore((s) => s.setDimension);
   const notice = useGraphStore((s) => s.notice);
@@ -57,22 +56,15 @@ export default function HUD() {
   // Recomputed every tick from the wavefront, so the caption always matches
   // the picture. A total printed while the wave is still moving would be a
   // line that disagrees with the thing it is describing.
-  const impact = impactCounts(blast, rippleFront, rippleEndpoints);
+  const impact = impactCounts(blast, rippleFront, []);
   const repoName = repoUrl?.replace(/^https?:\/\/github\.com\//, "") ?? "";
 
   return (
     <>
       <header className="hud-top">
-        <span className="brand">CodeLens</span>
+        <span className="brand">CodeLens RunFix</span>
         <span className="repo">{repoName}</span>
         <SearchBar />
-        <button
-          className="guide-open font-semibold text-cyan-400 hover:text-cyan-300 transition-all flex items-center gap-1"
-          onClick={() => useGraphStore.getState().setMemoryCenterOpen(true)}
-          title="Open Hindsight Memory Center"
-        >
-          🧠 <span className="hidden sm:inline">Memory Center</span>
-        </button>
 
         <button
           className="guide-open"
@@ -118,7 +110,7 @@ export default function HUD() {
       {overlay && (
         <div className="overlay-bar">
           <span className="overlay-label">
-            {overlay.label} · {overlay.count}
+            {overlay.label} · {overlay.count ?? overlay.nodeIds?.length ?? 0}
           </span>
           {overlay.detail && <span className="overlay-detail">{overlay.detail}</span>}
           <button className="overlay-clear" onClick={clearOverlay} aria-label="Clear">

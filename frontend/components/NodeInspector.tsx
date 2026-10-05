@@ -3,9 +3,6 @@
 import { STAGE_COPY, impactCounts } from "@/lib/impact";
 import { useGraphStore } from "@/lib/store";
 import type { CoChangePartner, EndpointRef, TestFile } from "@/lib/types";
-import MemoryEvidencePanel from "@/components/MemoryEvidencePanel";
-import AgentActivityTrace from "@/components/AgentActivityTrace";
-import MemoryComparisonModal from "@/components/MemoryComparisonModal";
 
 /** The inspector — a microscope, not a panel.
  *
@@ -40,12 +37,7 @@ export default function NodeInspector() {
   const dive = useGraphStore((s) => s.dive);
   const zoom = useGraphStore((s) => s.zoom);
   const rippleFront = useGraphStore((s) => s.rippleFront);
-  const rippleEndpoints = useGraphStore((s) => s.rippleEndpoints);
-
-  const memoryMode = useGraphStore((s) => s.memoryMode);
-  const toggleMemoryMode = useGraphStore((s) => s.toggleMemoryMode);
-  const memoryAnalysis = useGraphStore((s) => s.memoryAnalysis);
-  const runMemoryAwareAnalysis = useGraphStore((s) => s.runMemoryAwareAnalysis);
+  const rippleEndpoints = explanation?.meta?.endpoints ?? [];
 
   if (phase !== "exploring" && phase !== "revealing") return null;
   if (!selectedId) return null;
@@ -85,7 +77,7 @@ export default function NodeInspector() {
             <Stat label="dependents" value={role.direct_dependents} />
             <Stat label="dependencies" value={role.direct_dependencies} />
             <Stat label="ripples to" value={role.transitive_dependents} />
-            {identity.complexity !== null && (
+            {typeof identity.complexity === "number" && (
               <Stat label="complexity" value={identity.complexity} />
             )}
           </dl>
@@ -145,58 +137,9 @@ export default function NodeInspector() {
               <button className="inspector-action" onClick={() => void showRipple(graphId)}>
                 Impact
               </button>
-              <button
-                className="inspector-action text-cyan-400 font-semibold hover:text-cyan-300"
-                onClick={() => void runMemoryAwareAnalysis(graphId)}
-                title="Analyze using Hindsight team memory"
-              >
-                🧠 Memory
-              </button>
               <button className="inspector-action" onClick={toggleDetail}>
                 {detailOpen ? "Less" : "Explain"}
               </button>
-            </div>
-          )}
-
-          <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-800/80 pt-2 text-xs">
-            <button
-              onClick={toggleMemoryMode}
-              className={`rounded border px-2 py-1 font-mono text-[10px] transition-all ${
-                memoryMode === "MEMORY_ON"
-                  ? "border-cyan-700/60 bg-cyan-950/60 text-cyan-300"
-                  : "border-slate-800 bg-slate-900 text-slate-500"
-              }`}
-            >
-              Mode: {memoryMode}
-            </button>
-            <MemoryComparisonModal />
-          </div>
-
-          {memoryAnalysis && memoryAnalysis.node_id === graphId && (
-            <div className="mt-3 space-y-3 border-t border-slate-800/80 pt-3">
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1 text-xs font-bold text-cyan-300">
-                  🧠 Hindsight Recommendation
-                </span>
-                <span className="rounded border border-cyan-800/80 bg-cyan-950 px-2 py-0.5 font-mono text-[10px] text-cyan-300">
-                  {Math.round(memoryAnalysis.confidence * 100)}% Confidence
-                </span>
-              </div>
-              <p className="rounded-lg border border-cyan-900/50 bg-slate-900/90 p-3 text-xs leading-relaxed text-slate-200">
-                {memoryAnalysis.recommendation}
-              </p>
-              {memoryAnalysis.reasoning && (
-                <p className="rounded border border-slate-800 bg-slate-950 p-2.5 text-[11px] leading-relaxed text-slate-400">
-                  <strong className="text-slate-300">Rationale: </strong>
-                  {memoryAnalysis.reasoning}
-                </p>
-              )}
-
-              <MemoryEvidencePanel memories={memoryAnalysis.historical_memories} />
-              <AgentActivityTrace
-                steps={memoryAnalysis.agent_trace}
-                totalLatencyMs={memoryAnalysis.total_latency_ms}
-              />
             </div>
           )}
 
@@ -226,7 +169,7 @@ export default function NodeInspector() {
               <Coverage tests={explanation.meta.tested_by ?? []} onOpen={select} />
               <CoChanges partners={explanation.meta.co_changes ?? []} onOpen={select} />
 
-              {Object.keys(explanation.paths).length > 0 && (
+              {explanation.paths && Object.keys(explanation.paths).length > 0 && (
                 <section className="inspector-section">
                   <h3>Evidence</h3>
                   <ul className="inspector-paths">
@@ -246,7 +189,7 @@ export default function NodeInspector() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function Stat({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="inspector-stat">
       <dt>{label}</dt>

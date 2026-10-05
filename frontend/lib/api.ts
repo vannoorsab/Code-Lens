@@ -1,13 +1,19 @@
 import type {
   AnalyzeResponse,
   BlastResult,
-  Explanation,
-  QueryResult,
+  ChangeSummary,
+  DetectedProject,
+  DiagnosisReport,
+  ExplainResponse,
+  LogEntry,
+  ProposedFix,
+  RepoSummary,
+  RunFixState,
+  SearchResult,
+  TestSuiteResult,
+  TimelineEvent,
   ViewSpec,
 } from "./types";
-
-/** Thin fetchers. Components never call fetch directly — they read the
- *  store, and the store calls these. */
 
 async function expectOk(response: Response): Promise<Response> {
   if (!response.ok) {
@@ -25,22 +31,12 @@ async function expectOk(response: Response): Promise<Response> {
 
 interface JobStatus {
   job_id: string;
-  /** `interrupted` is what a server restart leaves behind. It is separate
-   *  from `error` because nothing went wrong with the analysis — the process
-   *  running it stopped existing — and "try again" is the right advice
-   *  rather than "something failed". */
   status: "pending" | "running" | "done" | "error" | "interrupted";
   error?: string;
 }
 
 const ANALYZE_POLL_MS = 800;
 
-/** Analyze returns a job id in milliseconds, always — a large monorepo can
- *  legitimately take a minute or more to clone and parse, and holding that
- *  open as one HTTP request is exactly what broke: Next's rewrite proxy
- *  aborts at 30s by default, and other layers between here and the server
- *  have their own limits. Polling this trivial status endpoint has no such
- *  ceiling, so repo size no longer decides whether analysis works. */
 export async function analyzeRepo(source: string): Promise<AnalyzeResponse> {
   const accepted = await expectOk(
     await fetch("/api/analyze", {
@@ -59,8 +55,6 @@ export async function analyzeRepo(source: string): Promise<AnalyzeResponse> {
     if (body.status === "done") return body as AnalyzeResponse;
     if (body.status === "error") throw new Error(body.error ?? "Analysis failed.");
     if (body.status === "interrupted") {
-      // Terminal, and it must be handled explicitly: without this branch the
-      // loop polls a job that will never progress, forever.
       throw new Error(
         body.error ?? "The server restarted during this analysis. Please try again.",
       );
@@ -84,7 +78,7 @@ export async function fetchViewSpec(
 export async function fetchExplanation(
   snapshotId: number,
   nodeId: string,
-): Promise<Explanation> {
+): Promise<ExplainResponse> {
   const response = await expectOk(
     await fetch(
       `/api/repos/${snapshotId}/explain?node_id=${encodeURIComponent(nodeId)}`,
@@ -94,198 +88,155 @@ export async function fetchExplanation(
   return response.json();
 }
 
-/** Run any registered query plan.
- *
- *  The backend registry holds eleven plans and this file used to reach three,
- *  so `risk`, `centrality`, `dependencies`, `entrypoints`, `modules`,
- *  `hidden_coupling`, `untested_hubs`, `bus_factor` and `endpoints` all
- *  worked, were tested, and could not be seen. One generic caller is the whole
- *  fix: the endpoint has always been generic
- *  (`POST /repos/{id}/query/{name}`) — only the client was not.
- *
- *  Registering a plan on the backend now makes it reachable here with no
- *  frontend change, which is the property the registry was designed for.
- */
-export async function runQuery<T = QueryResult>(
+export async function runQuery(
   snapshotId: number,
-  name: string,
-  params: Record<string, unknown> = {},
-): Promise<T> {
-  const response = await expectOk(
-    await fetch(`/api/repos/${snapshotId}/query/${name}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      cache: "no-store",
-      body: JSON.stringify({ params }),
-    }),
-  );
-  return response.json();
-}
-
-export function fetchBlastRadius(
-  snapshotId: number,
-  nodeId: string,
+  plan: string,
+  target?: string,
 ): Promise<BlastResult> {
-  return runQuery<BlastResult>(snapshotId, "blast_radius", { node_id: nodeId });
-}
-
-/** Concept search — deterministic, no API key, already on the backend. */
-export async function searchRepo(
-  snapshotId: number,
-  text: string,
-  top = 12,
-): Promise<QueryResult> {
   const response = await expectOk(
-    await fetch(`/api/repos/${snapshotId}/search`, {
+    await fetch(`/api/repos/${snapshotId}/query/${encodeURIComponent(plan)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      cache: "no-store",
-      body: JSON.stringify({ text, top }),
+      body: JSON.stringify({ target: target ?? null }),
     }),
   );
   return response.json();
 }
 
-// ── Hindsight Memory Engine API Client ─────────────────────────────────
-
-export async function fetchHindsightHealth(): Promise<HindsightHealth> {
-  const response = await fetch("/api/hindsight/health", { cache: "no-store" });
-  if (!response.ok) {
-    return {
-      connected: false,
-      hindsight_enabled: false,
-      bank_id: "codelens-default",
-      base_url: "http://localhost:8888",
-      message: "Could not reach backend hindsight health endpoint.",
-      error: response.statusText,
-    };
-  }
-  return response.json();
-}
-
-export async function fetchHindsightOverview(
+export async function searchSymbols(
   snapshotId: number,
-): Promise<HindsightOverview> {
+  query: string,
+  limit = 20,
+): Promise<SearchResult[]> {
   const response = await expectOk(
-    await fetch(`/api/repos/${snapshotId}/hindsight/overview`, { cache: "no-store" }),
+    await fetch(
+      `/api/repos/${snapshotId}/search?q=${encodeURIComponent(query)}&limit=${limit}`,
+      { cache: "no-store" },
+    ),
   );
   return response.json();
 }
 
-export async function fetchMemoryAwareAnalysis(
-  snapshotId: number,
-  nodeId: string,
-  memoryMode = "MEMORY_ON",
-): Promise<MemoryAwareAnalysisResult> {
+export async function fetchRepos(): Promise<RepoSummary[]> {
   const response = await expectOk(
-    await fetch(`/api/repos/${snapshotId}/hindsight/analyze`, {
+    await fetch("/api/repos", { cache: "no-store" }),
+  );
+  return response.json();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── CODELENS RUNFIX API CLIENT ───────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+
+export async function detectProject(workspacePath = "."): Promise<DetectedProject> {
+  const response = await expectOk(
+    await fetch("/api/runfix/detect", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      cache: "no-store",
-      body: JSON.stringify({ node_id: nodeId, memory_mode: memoryMode }),
+      body: JSON.stringify({ workspace_path: workspacePath }),
     }),
   );
   return response.json();
 }
 
-export async function fetchMemoryComparison(
-  snapshotId: number,
-  queryText: string,
-  nodeId?: string,
-): Promise<MemoryComparisonResult> {
+export async function stopExecution(executionId: string): Promise<{ stopped: boolean }> {
   const response = await expectOk(
-    await fetch(`/api/repos/${snapshotId}/hindsight/compare`, {
+    await fetch(`/api/runfix/stop?execution_id=${encodeURIComponent(executionId)}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      cache: "no-store",
-      body: JSON.stringify({ query_text: queryText, node_id: nodeId }),
     }),
   );
   return response.json();
 }
 
-export async function retainMemory(
-  snapshotId: number,
-  payload: Record<string, unknown>,
-): Promise<unknown> {
+export async function diagnoseExecution(
+  command: string,
+  exitCode: number | null,
+  stdout: string,
+  stderr: string,
+  workspacePath = ".",
+): Promise<DiagnosisReport> {
   const response = await expectOk(
-    await fetch(`/api/repos/${snapshotId}/hindsight/retain`, {
+    await fetch("/api/runfix/diagnose", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        command,
+        exit_code: exitCode,
+        stdout,
+        stderr,
+        workspace_path: workspacePath,
+      }),
     }),
   );
   return response.json();
 }
 
-export async function submitDeveloperFeedback(
-  snapshotId: number,
-  payload: Record<string, unknown>,
-): Promise<unknown> {
+export async function proposeFix(
+  diagnosis: DiagnosisReport,
+  workspacePath = ".",
+): Promise<ProposedFix> {
   const response = await expectOk(
-    await fetch(`/api/repos/${snapshotId}/hindsight/feedback`, {
+    await fetch("/api/runfix/fix", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ diagnosis, workspace_path: workspacePath }),
     }),
   );
   return response.json();
 }
 
-export async function submitOutcome(
-  snapshotId: number,
-  payload: Record<string, unknown>,
-): Promise<unknown> {
+export async function applyFix(
+  fix: ProposedFix,
+  workspacePath = ".",
+): Promise<{ success: boolean; file: string }> {
   const response = await expectOk(
-    await fetch(`/api/repos/${snapshotId}/hindsight/outcome`, {
+    await fetch("/api/runfix/apply", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ fix, workspace_path: workspacePath }),
     }),
   );
   return response.json();
 }
 
-export async function fetchLearningTimeline(
-  snapshotId: number,
-): Promise<import("./types").LearningTimelineResponse> {
+export async function generateTests(
+  fix: ProposedFix,
+  workspacePath = ".",
+): Promise<TestSuiteResult> {
   const response = await expectOk(
-    await fetch(`/api/repos/${snapshotId}/hindsight/timeline`, { cache: "no-store" }),
-  );
-  return response.json();
-}
-
-export async function runChangeSimulator(
-  snapshotId: number,
-  nodeId: string,
-  intentText?: string,
-): Promise<import("./types").ChangeSimulationResult> {
-  const response = await expectOk(
-    await fetch(`/api/repos/${snapshotId}/hindsight/simulate`, {
+    await fetch("/api/runfix/tests", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ node_id: nodeId, intent_text: intentText }),
+      body: JSON.stringify({ fix, workspace_path: workspacePath }),
     }),
   );
   return response.json();
 }
 
-export async function fetchTeamKnowledge(
-  snapshotId: number,
-): Promise<import("./types").TeamKnowledgeResponse> {
+export async function setupDemoSandbox(
+  projectType: "react" | "python" = "react",
+): Promise<{ workspace_path: string; project: DetectedProject; message: string }> {
   const response = await expectOk(
-    await fetch(`/api/repos/${snapshotId}/hindsight/knowledge`, { cache: "no-store" }),
+    await fetch("/api/runfix/demo/setup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ project_type: projectType }),
+    }),
   );
   return response.json();
 }
 
-export async function fetchLearningAnalytics(
-  snapshotId: number,
-): Promise<import("./types").LearningAnalyticsResponse> {
+export async function createGitHubPR(
+  repoName: string,
+  fix: ProposedFix,
+  tests?: TestSuiteResult,
+): Promise<ChangeSummary> {
   const response = await expectOk(
-    await fetch(`/api/repos/${snapshotId}/hindsight/analytics`, { cache: "no-store" }),
+    await fetch(`/api/runfix/github/pr?repo_name=${encodeURIComponent(repoName)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fix, tests }),
+    }),
   );
   return response.json();
 }
-
-

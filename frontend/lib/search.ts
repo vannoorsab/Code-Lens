@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { searchRepo } from "./api";
+import { searchSymbols } from "./api";
 import { useGraphStore } from "./store";
 
 /** Concept search, as one hook.
@@ -43,10 +43,10 @@ export function useConceptSearch(text: string, active: boolean, top = 10) {
     let cancelled = false;
     setPending(true);
     const timer = window.setTimeout(() => {
-      void searchRepo(snapshotId, query, top)
+      void searchSymbols(snapshotId, query, top)
         .then((result) => {
           if (cancelled) return;
-          setHits(result.ranked.map(toHit));
+          setHits(result.map(toHit));
           setError(null);
         })
         .catch((failure: Error) => {
@@ -68,20 +68,12 @@ export function useConceptSearch(text: string, active: boolean, top = 10) {
   return { hits, pending, error };
 }
 
-function toHit(entry: { node_id: string; reasons: Record<string, unknown> }): SearchHit {
-  const reasons = entry.reasons as {
-    name?: string;
-    kind?: string | null;
-    file_path?: string | null;
-    start_line?: number | null;
-  };
+function toHit(entry: { id: string; label: string; kind?: string; file_path?: string | null }): SearchHit {
   return {
-    id: entry.node_id,
-    // The qualified name is the last resort, not the label: it can be the
-    // whole dotted path to a nested method.
-    name: reasons.name ?? entry.node_id.split(":").slice(1).join(":"),
-    path: reasons.file_path ?? "",
-    kind: reasons.kind ?? null,
-    line: reasons.start_line ?? null,
+    id: entry.id,
+    name: entry.label ?? entry.id.split(":").slice(1).join(":"),
+    path: entry.file_path ?? "",
+    kind: entry.kind ?? null,
+    line: null,
   };
 }

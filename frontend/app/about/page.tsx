@@ -6,34 +6,34 @@ import AppShell from "@/components/AppShell";
 export default function AboutPage() {
   return (
     <AppShell>
-      <div className="p-8 space-y-8 max-w-5xl mx-auto">
+      <div className="p-8 space-y-8 max-w-5xl mx-auto font-sans overflow-y-auto h-full">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 pb-5">
           <div>
             <div className="flex items-center gap-2 font-mono text-xs text-cyan-400">
-              <span>ℹ️ System Overview</span>
+              <span>ℹ️ System Architecture</span>
             </div>
-            <h1 className="text-2xl font-extrabold text-white mt-1">CODE-LENS Architecture & Design</h1>
+            <h1 className="text-2xl font-extrabold text-white mt-1">CodeLens RunFix Architecture</h1>
             <p className="text-xs text-slate-400 mt-1">
-              Combining structural AST graph facts with Hindsight long-term team memory
+              Autonomous AI Debugging & Verification Engine — Run, Diagnose, Fix & Verify
             </p>
           </div>
         </div>
 
         {/* Architecture Pipeline Diagram */}
         <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-8 space-y-6 shadow-2xl backdrop-blur-md">
-          <h2 className="text-sm font-bold text-white font-mono text-center">System Architecture Flow</h2>
+          <h2 className="text-sm font-bold text-white font-mono text-center">Autonomous Debugging Loop</h2>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
             {[
-              { title: "1. Ingestion", desc: "Clones repo & parses AST structure" },
-              { title: "2. Knowledge Graph", desc: "Deterministic MultiDiGraph in NetworkX" },
-              { title: "3. Git Intelligence", desc: "Co-change coupling & file churn" },
-              { title: "4. Hindsight Engine", desc: "RETAIN, RECALL, REFLECT experience" },
-              { title: "5. AI Agent", desc: "Synthesizes code evidence + memory" },
-              { title: "6. Developer Feedback", desc: "ACCEPTED, REJECTED, CORRECTED" },
-              { title: "7. Outcome Learning", desc: "Stores lessons for future changes" },
-              { title: "8. Continuous Loop", desc: "Smarter, contextual guidance" },
+              { title: "1. Project Detection", desc: "Identifies language, framework, manifest & run scripts" },
+              { title: "2. Execution Sandbox", desc: "Isolated environment with timeouts & resource bounds" },
+              { title: "3. Error Extraction", desc: "Parses compiler, runtime, & dependency error lines" },
+              { title: "4. AI Diagnosis Agent", desc: "Identifies root cause, affected file & line location" },
+              { title: "5. AI Fix Agent", desc: "Synthesizes minimal surgical unified diff patches" },
+              { title: "6. Verification Loop", desc: "Reruns in sandbox to guarantee zero regression" },
+              { title: "7. AI Test Generator", desc: "Synthesizes automated Vitest/Jest/PyTest suites" },
+              { title: "8. GitHub Integration", desc: "Creates verified branches & Pull Requests" },
             ].map((step, idx) => (
               <div key={idx} className="p-3.5 rounded-xl border border-slate-800 bg-slate-950 text-xs space-y-1">
                 <span className="font-mono font-bold text-cyan-400">{step.title}</span>
@@ -44,16 +44,16 @@ export default function AboutPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800 text-xs">
             <div className="p-4 rounded-xl border border-cyan-900/50 bg-cyan-950/20 space-y-2">
-              <h3 className="font-bold text-cyan-300 font-mono">🕸️ Knowledge Graph = Structural Intelligence</h3>
+              <h3 className="font-bold text-cyan-300 font-mono">⚡ Real Execution & Sandboxing</h3>
               <p className="text-slate-300 leading-relaxed">
-                Computes deterministic AST node types, imports, dependencies, entrypoints, and blast radius. Requires zero LLM calls.
+                Runs real commands with line-by-line log streaming, process isolation, and host credential sanitization.
               </p>
             </div>
 
-            <div className="p-4 rounded-xl border border-purple-900/50 bg-purple-950/20 space-y-2">
-              <h3 className="font-bold text-purple-300 font-mono">🧠 Hindsight = Experiential Intelligence</h3>
+            <div className="p-4 rounded-xl border border-indigo-900/50 bg-indigo-950/20 space-y-2">
+              <h3 className="font-bold text-indigo-300 font-mono">🛡️ Surgical Fixes & Verification</h3>
               <p className="text-slate-300 leading-relaxed">
-                Remembers team decisions, past regressions, review comments, and failed approaches. Enables the agent to learn over time.
+                Never rewrites whole files blindly. Generates minimal targeted patches and proves fix validity by re-running tests.
               </p>
             </div>
           </div>

@@ -131,15 +131,11 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str = "http://localhost:11434/v1"
     LLM_MODEL: str | None = None  # override the provider's default model
 
-    # ── Hindsight Memory Core ─────────────────────────────────────────────
-    #: Hindsight Memory Engine integration — turned off by default.
-    #: When enabled, CODE-LENS retains team experience, recalls past decisions & bugs,
-    #: and reflects over historical memories during AI recommendations.
-    HINDSIGHT_ENABLED: bool = False
-    HINDSIGHT_BASE_URL: str = "http://localhost:8888"
-    HINDSIGHT_API_KEY: str | None = None
-    HINDSIGHT_BANK_ID: str = "codelens-default"
-    HINDSIGHT_TIMEOUT_SECONDS: int = 10
+    # ── CodeLens RunFix Execution Engine ──────────────────────────────────
+    RUNFIX_SANDBOX_TIMEOUT_SECONDS: int = 120
+    RUNFIX_MAX_ITERATIONS: int = 5
+    RUNFIX_MAX_MEMORY_MB: int = 1024
+    GITHUB_TOKEN: str | None = None
 
     @property
     def sqlite_url(self) -> str:

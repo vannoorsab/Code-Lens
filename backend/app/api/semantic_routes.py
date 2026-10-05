@@ -19,6 +19,7 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
+from urllib.request import url2pathname
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -248,7 +249,7 @@ def _root_for(graph: KnowledgeGraph) -> Path:
     repo_url = graph.snapshot.repo_url
     parsed = urlparse(repo_url)
     if parsed.scheme == "file":
-        root = Path(unquote(parsed.path))
+        root = Path(url2pathname(unquote(parsed.path)))
         if not root.is_dir():
             raise IngestionError(f"analysed tree {root} no longer exists")
         return root

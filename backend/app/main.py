@@ -6,8 +6,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.body_limit import BodyLimitMiddleware
-from app.api.hindsight_routes import router as hindsight_router
 from app.api.routes import router as api_router
+from app.api.runfix_routes import router as runfix_router
 from app.api.semantic_routes import router as semantic_router
 from app.core import jobs
 from app.core.config import settings
@@ -60,7 +60,7 @@ def create_app() -> FastAPI:
 
     app.include_router(api_router)
     app.include_router(semantic_router)
-    app.include_router(hindsight_router)
+    app.include_router(runfix_router)
 
 
     @app.get("/health", tags=["System"])

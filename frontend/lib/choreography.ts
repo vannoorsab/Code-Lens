@@ -201,7 +201,7 @@ export function buildFrame(graph: Graph, state: ChoreographyState): Frame {
   if (rippleFor && graph.hasNode(rippleFor)) {
     rippleSource = rippleFor;
   } else if (rippleFor && blast) {
-    const focusPath = blast.meta.focus?.file_path;
+    const focusPath = blast.meta?.focus?.file_path;
     if (focusPath && graph.hasNode(`file:${focusPath}`)) {
       rippleSource = `file:${focusPath}`;
     }

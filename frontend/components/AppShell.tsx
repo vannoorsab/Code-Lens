@@ -12,19 +12,18 @@ interface AppShellProps {
 }
 
 const NAV_ITEMS = [
-  { path: "/dashboard", label: "Overview", icon: "📊" },
+  { path: "/dashboard", label: "Dashboard", icon: "📊" },
+  { path: "/runfix", label: "Run & Fix", icon: "⚡" },
+  { path: "/terminal", label: "Terminal Console", icon: "💻" },
+  { path: "/changes", label: "Changes & Diff", icon: "📝" },
+  { path: "/tests", label: "Test Suites", icon: "🧪" },
   { path: "/explorer", label: "Code Explorer", icon: "📂" },
   { path: "/graph", label: "Knowledge Graph", icon: "🕸️" },
   { path: "/blast-radius", label: "Blast Radius", icon: "💥" },
-  { path: "/agent", label: "AI Agent", icon: "🤖" },
-  { path: "/memory", label: "Memory Center", icon: "🧠" },
-  { path: "/learning", label: "Learning Center", icon: "📈" },
-  { path: "/simulator", label: "Change Simulator", icon: "⚡" },
   { path: "/architecture", label: "Architecture", icon: "🏛️" },
   { path: "/git", label: "Git Intelligence", icon: "🌿" },
   { path: "/risks", label: "Risk Center", icon: "⚠️" },
-  { path: "/team", label: "Team Knowledge", icon: "👥" },
-  { path: "/activity", label: "Agent Activity", icon: "⚡" },
+  { path: "/activity", label: "Agent Activity", icon: "🤖" },
 ];
 
 const BOTTOM_ITEMS = [
@@ -35,85 +34,92 @@ const BOTTOM_ITEMS = [
 export default function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const repoUrl = useGraphStore((s) => s.repoUrl);
-  const snapshotId = useGraphStore((s) => s.snapshotId);
-  const memoryMode = useGraphStore((s) => s.memoryMode);
-  const toggleMemoryMode = useGraphStore((s) => s.toggleMemoryMode);
+  const runFix = useGraphStore((s) => s.runFix);
   const setPaletteOpen = useGraphStore((s) => s.setPalette);
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  const cleanRepoName = repoUrl
-    ? repoUrl.replace("https://github.com/", "").replace("http://github.com/", "")
-    : "psf/requests";
+  const project = runFix.project;
+  const cleanRepoName = project?.name || (repoUrl ? repoUrl.replace("https://github.com/", "") : "ecommerce-dashboard");
+  const isGraphPage = pathname === "/graph";
+  const isWorkspacePage = pathname === "/runfix" || pathname === "/dashboard";
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100 selection:bg-cyan-500 selection:text-slate-950 font-sans">
+    <div className="app-shell">
+      {mobileNavOpen && (
+        <button
+          className="app-mobile-scrim"
+          onClick={() => setMobileNavOpen(false)}
+          aria-label="Close navigation"
+        />
+      )}
       {/* ── SIDEBAR ────────────────────────────────────────────────────── */}
       <aside
-        className={`flex flex-col border-r border-slate-800 bg-slate-950/90 backdrop-blur-md transition-all duration-300 z-30 ${
-          sidebarCollapsed ? "w-16" : "w-64"
-        }`}
+        className={`app-sidebar${sidebarCollapsed ? " app-sidebar--collapsed" : ""}${mobileNavOpen ? " app-sidebar--open" : ""}`}
       >
         {/* Brand Header */}
-        <div className="flex h-14 items-center justify-between border-b border-slate-800 px-4">
+        <div className="app-sidebar-brand">
           <Link href="/" className="flex items-center gap-2.5 overflow-hidden">
-            <div className="h-7 w-7 shrink-0 rounded-lg bg-gradient-to-br from-cyan-500 to-indigo-600 flex items-center justify-center font-mono font-bold text-slate-950 text-xs shadow-md">
-              CL
+            <div className="app-brand-mark">
+              RF
             </div>
             {!sidebarCollapsed && (
-              <span className="font-bold text-sm tracking-tight text-white font-mono truncate">
-                CODE-LENS
-              </span>
+              <div className="flex flex-col">
+                <span className="app-brand-name">
+                  CodeLens RunFix
+                </span>
+                <span className="app-brand-caption">
+                  Autonomous Debugger
+                </span>
+              </div>
             )}
           </Link>
           <button
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="rounded p-1 text-slate-400 hover:bg-slate-900 hover:text-white text-xs"
-            aria-label="Toggle Sidebar"
+            className="app-sidebar-collapse"
+            aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!sidebarCollapsed}
           >
             {sidebarCollapsed ? "→" : "←"}
           </button>
         </div>
 
         {/* Navigation Items */}
-        <nav className="flex-1 overflow-y-auto p-2 space-y-1">
+        <nav className="app-nav" aria-label="Main navigation">
           {NAV_ITEMS.map((item) => {
             const isActive = pathname === item.path;
             return (
               <Link
                 key={item.path}
                 href={item.path}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-xs font-medium transition-all ${
-                  isActive
-                    ? "bg-cyan-950 text-cyan-300 border border-cyan-800/80 shadow-sm"
-                    : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"
-                }`}
+                onClick={() => setMobileNavOpen(false)}
+                aria-current={isActive ? "page" : undefined}
+                className={`app-nav-link${isActive ? " app-nav-link--active" : ""}`}
                 title={sidebarCollapsed ? item.label : undefined}
               >
-                <span className="text-base shrink-0">{item.icon}</span>
+                <span className="app-nav-icon" aria-hidden="true">{item.icon}</span>
                 {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
               </Link>
             );
           })}
         </nav>
 
-        {/* Bottom Menu Items */}
-        <div className="border-t border-slate-800 p-2 space-y-1">
+        {/* Bottom Settings & About Links */}
+        <div className="app-nav-footer">
           {BOTTOM_ITEMS.map((item) => {
             const isActive = pathname === item.path;
             return (
               <Link
                 key={item.path}
                 href={item.path}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-xs font-medium transition-all ${
-                  isActive
-                    ? "bg-cyan-950 text-cyan-300 border border-cyan-800/80"
-                    : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"
-                }`}
+                onClick={() => setMobileNavOpen(false)}
+                aria-current={isActive ? "page" : undefined}
+                className={`app-nav-link${isActive ? " app-nav-link--active" : ""}`}
                 title={sidebarCollapsed ? item.label : undefined}
               >
-                <span className="text-base shrink-0">{item.icon}</span>
+                <span className="app-nav-icon" aria-hidden="true">{item.icon}</span>
                 {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
               </Link>
             );
@@ -122,70 +128,64 @@ export default function AppShell({ children }: AppShellProps) {
       </aside>
 
       {/* ── MAIN CONTENT AREA ──────────────────────────────────────────── */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Top Header Bar */}
-        <header className="flex h-14 items-center justify-between border-b border-slate-800 bg-slate-950/80 px-6 backdrop-blur-md z-20">
-          {/* Left: Repository info */}
-          <div className="flex items-center gap-3">
-            <Link
-              href="/connect"
-              className="flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-1.5 border border-slate-800 text-xs font-mono text-slate-300 hover:text-white transition-all"
+      <div className="app-content">
+        {/* Top App Bar */}
+        <header className="app-topbar">
+          {/* Active Project Pill */}
+          <div className="app-project">
+            <button
+              className="app-mobile-toggle"
+              onClick={() => setMobileNavOpen(true)}
+              aria-label="Open navigation"
+              aria-expanded={mobileNavOpen}
             >
-              <span>📁</span>
-              <span className="font-semibold text-white">{cleanRepoName}</span>
-              {snapshotId && <span className="text-[10px] text-slate-500">#{snapshotId}</span>}
-            </Link>
-
-            <span className="hidden sm:inline-block rounded bg-slate-900 px-2 py-0.5 font-mono text-[10px] text-slate-400 border border-slate-850">
-              branch: main
-            </span>
+              <span aria-hidden="true">☰</span>
+            </button>
+            <span className="app-project-label">PROJECT</span>
+            <div className="app-project-pill">
+              <span className="app-project-status" />
+              <span className="app-project-name">{cleanRepoName}</span>
+            </div>
+            {project?.framework && (
+              <span className="app-framework-pill">
+                {project.framework}
+              </span>
+            )}
           </div>
 
-          {/* Right: Search, Memory Toggle, Agent Status */}
-          <div className="flex items-center gap-3">
-            {/* Global Search Button */}
+          {/* Quick Actions & Search */}
+          <div className="app-topbar-actions">
+            {/* Global Search ⌘K Trigger */}
             <button
               onClick={() => setSearchOpen(true)}
-              className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs text-slate-400 hover:border-slate-700 hover:text-white transition-all"
+              className="app-search-trigger"
             >
-              <span>🔍</span>
-              <span className="hidden md:inline text-[11px]">Search code, memories...</span>
-              <kbd className="rounded bg-slate-950 px-1.5 py-0.5 font-mono text-[10px] text-slate-500 border border-slate-800">
+              <span aria-hidden="true">⌕</span>
+              <span className="app-search-label">Search files, symbols...</span>
+              <kbd className="app-shortcut">
                 ⌘K
               </kbd>
             </button>
 
-            {/* Memory Mode Toggle */}
-            <button
-              onClick={toggleMemoryMode}
-              className={`rounded-lg border px-2.5 py-1 font-mono text-[11px] font-semibold transition-all flex items-center gap-1.5 ${
-                memoryMode === "MEMORY_ON"
-                  ? "border-cyan-800 bg-cyan-950/60 text-cyan-300"
-                  : "border-slate-800 bg-slate-900 text-slate-500"
-              }`}
+            {/* RunFix Action Badge */}
+            <Link
+              href="/runfix"
+              className="app-runfix-link"
             >
-              <span>🧠</span>
-              <span>{memoryMode}</span>
-            </button>
-
-            {/* Agent Status Badge */}
-            <div className="hidden sm:flex items-center gap-1.5 rounded-full border border-emerald-800/60 bg-emerald-950/40 px-2.5 py-1 text-[11px] font-medium text-emerald-400">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Agent Ready</span>
-            </div>
+              <span aria-hidden="true">⚡</span>
+              <span className="app-runfix-label">RunFix Console</span>
+            </Link>
           </div>
         </header>
 
-        {/* Dynamic Page Content View */}
-        <main className="flex-1 overflow-y-auto relative bg-slate-950">
+        {/* Page Viewport */}
+        <main className={`app-main${isGraphPage ? " app-main--canvas" : ""}${isWorkspacePage ? " app-main--workspace" : ""}`}>
           {children}
         </main>
       </div>
 
-      {/* Global Search Modal */}
-      {searchOpen && <GlobalSearchModal onClose={() => setSearchOpen(false)} />}
-
-      {/* ⌘K Command Palette */}
+      {/* Global Modals */}
+      <GlobalSearchModal isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
       <CommandPalette />
     </div>
   );
